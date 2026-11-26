@@ -36,7 +36,7 @@ coverage/
 docker/data/
 
 # Prisma
-apps/backend/prisma/migrations/
+# Las migraciones en apps/backend/prisma/migrations/ se versionan; no ignorar.
 
 # Misc
 *.tsbuildinfo

@@ -2,70 +2,91 @@ import { PrismaClient } from "../src/generated/prisma/client.js";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcrypt";
 
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
+// Seed de DESARROLLO. Ejecutar solo sobre una base creada desde prisma/migrations.
+// Nunca ejecutar contra una base de producción: crea usuarios con contraseña demo.
+
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl || databaseUrl === "CAMBIARME") {
+  throw new Error(
+    "DATABASE_URL no configurada. Copiar apps/backend/.env.example a apps/backend/.env y completar antes de ejecutar el seed.",
+  );
+}
+
+const adapter = new PrismaPg({ connectionString: databaseUrl });
 const prisma = new PrismaClient({ adapter });
 
-// ── Permission definitions ──
+// UUID v4 deterministas: 00000000-0000-4000-8000-<grupo><indice>.
+// El grupo identifica la entidad y el indice la fila, para que reruns no dupliquen.
+function uuid(group: number, index: number): string {
+  return `00000000-0000-4000-8000-${group.toString(16).padStart(2, "0")}${index.toString(16).padStart(10, "0")}`;
+}
+
+const GROUPS = {
+  tenant: 0x01,
+  permission: 0x02,
+  role: 0x03,
+  user: 0x04,
+  fieldStatus: 0x05,
+  variety: 0x06,
+  campaign: 0x07,
+  activityType: 0x08,
+  costCategory: 0x09,
+  supplier: 0x0a,
+  field: 0x0b,
+  activity: 0x0c,
+  cost: 0x0d,
+  harvest: 0x0e,
+  alert: 0x0f,
+  setting: 0x10,
+  rolePermission: 0x11,
+} as const;
+
+// Contraseña exclusiva de desarrollo. No es un secreto de producción.
+const DEMO_PASSWORD = "SmartCañaDemo2026!";
+const DEMO_CUIT = "30-12345678-9";
+
+// ── Permisos (coinciden con PermissionCode de @smartcana/types) ──
 const permissionDefs: { code: string; name: string; module: string }[] = [
-  // Dashboard
   { code: "dashboard.view", name: "Ver Dashboard", module: "dashboard" },
-  // Fields
   { code: "fields.view", name: "Ver Campos", module: "fields" },
   { code: "fields.create", name: "Crear Campos", module: "fields" },
   { code: "fields.edit", name: "Editar Campos", module: "fields" },
   { code: "fields.delete", name: "Eliminar Campos", module: "fields" },
-  // Activities
   { code: "activities.view", name: "Ver Actividades", module: "activities" },
   { code: "activities.create", name: "Crear Actividades", module: "activities" },
   { code: "activities.edit", name: "Editar Actividades", module: "activities" },
   { code: "activities.delete", name: "Eliminar Actividades", module: "activities" },
-  // Production
   { code: "production.view", name: "Ver Producción", module: "production" },
   { code: "production.edit", name: "Editar Producción", module: "production" },
-  // Costs
   { code: "costs.view", name: "Ver Costos", module: "costs" },
   { code: "costs.create", name: "Crear Costos", module: "costs" },
   { code: "costs.edit", name: "Editar Costos", module: "costs" },
   { code: "costs.delete", name: "Eliminar Costos", module: "costs" },
   { code: "costs.export", name: "Exportar Costos", module: "costs" },
-  // Harvests
   { code: "harvests.view", name: "Ver Cosechas", module: "harvests" },
   { code: "harvests.create", name: "Crear Cosechas", module: "harvests" },
   { code: "harvests.edit", name: "Editar Cosechas", module: "harvests" },
-  // SHI
   { code: "shi.view", name: "Ver SHI", module: "shi" },
-  // IA
   { code: "ia.use", name: "Usar IA", module: "ia" },
-  // Reports
   { code: "reports.view", name: "Ver Reportes", module: "reports" },
   { code: "reports.export", name: "Exportar Reportes", module: "reports" },
-  // Executive
   { code: "executive.view", name: "Vista Ejecutiva", module: "executive" },
-  // Map
   { code: "map.view", name: "Ver Mapa", module: "map" },
-  // Users
   { code: "users.view", name: "Ver Usuarios", module: "users" },
   { code: "users.create", name: "Crear Usuarios", module: "users" },
   { code: "users.edit", name: "Editar Usuarios", module: "users" },
   { code: "users.delete", name: "Eliminar Usuarios", module: "users" },
-  // Roles
   { code: "roles.view", name: "Ver Roles", module: "roles" },
   { code: "roles.manage", name: "Gestionar Roles", module: "roles" },
-  // Permissions
   { code: "permissions.manage", name: "Gestionar Permisos", module: "permissions" },
-  // Companies
   { code: "companies.view", name: "Ver Empresas", module: "companies" },
   { code: "companies.manage", name: "Gestionar Empresas", module: "companies" },
-  // Sessions
   { code: "sessions.view", name: "Ver Sesiones", module: "sessions" },
   { code: "sessions.revoke", name: "Revocar Sesiones", module: "sessions" },
-  // Audit
   { code: "audit.view", name: "Ver Auditoría", module: "audit" },
   { code: "audit.export", name: "Exportar Auditoría", module: "audit" },
-  // Settings
   { code: "settings.view", name: "Ver Configuración", module: "settings" },
   { code: "settings.manage", name: "Gestionar Configuración", module: "settings" },
-  // Suppliers
   { code: "suppliers.view", name: "Ver Proveedores", module: "suppliers" },
   { code: "suppliers.create", name: "Crear Proveedores", module: "suppliers" },
   { code: "suppliers.edit", name: "Editar Proveedores", module: "suppliers" },
@@ -74,12 +95,18 @@ const permissionDefs: { code: string; name: string; module: string }[] = [
 
 const ALL_CODES = permissionDefs.map((p) => p.code);
 
-// ── Role permission sets ──
-const roleDefs: { code: string; name: string; description: string; isSystem: boolean; permissions: string[] }[] = [
+// ── Roles: el catalogo incluye super_admin, pero ningun usuario demo lo usa ──
+const roleDefs: {
+  code: string;
+  name: string;
+  description: string;
+  isSystem: boolean;
+  permissions: string[];
+}[] = [
   {
     code: "super_admin",
     name: "Super Administrador",
-    description: "Acceso total al sistema",
+    description: "Acceso total al sistema (catalogo; sin usuarios demo asignados)",
     isSystem: true,
     permissions: ALL_CODES,
   },
@@ -180,99 +207,221 @@ const roleDefs: { code: string; name: string; description: string; isSystem: boo
 ];
 
 async function seed() {
-  console.log("🌱 Seeding SmartCaña database...");
+  console.log("🌱 Seeding SmartCaña (desarrollo) ...");
 
-  // ── Permissions ──
-  await prisma.permission.createMany({
-    data: permissionDefs,
-    skipDuplicates: true,
+  // ── Permisos globales ──
+  const permissionRows = permissionDefs.map((p, i) => ({
+    id: uuid(GROUPS.permission, i + 1),
+    ...p,
+  }));
+  await prisma.permission.createMany({ data: permissionRows, skipDuplicates: true });
+  const storedPermissions = await prisma.permission.findMany({
+    where: { code: { in: permissionDefs.map((p) => p.code) } },
   });
-  const allPermissions = await prisma.permission.findMany();
-  const permMap = Object.fromEntries(allPermissions.map((p) => [p.code, p.id]));
-  console.log(`  ✓ ${allPermissions.length} permisos`);
+  const permissionIdByCode = new Map(storedPermissions.map((p) => [p.code, p.id]));
+  console.log(`  ✓ ${permissionIdByCode.size} permisos`);
 
-  // ── Field Statuses ──
-  const statuses = await Promise.all([
-    prisma.fieldStatus.upsert({ where: { code: "active" }, update: {}, create: { code: "active", name: "En producción" } }),
-    prisma.fieldStatus.upsert({ where: { code: "harvesting" }, update: {}, create: { code: "harvesting", name: "En cosecha" } }),
-    prisma.fieldStatus.upsert({ where: { code: "resting" }, update: {}, create: { code: "resting", name: "En descanso" } }),
-    prisma.fieldStatus.upsert({ where: { code: "inactive" }, update: {}, create: { code: "inactive", name: "Inactivo" } }),
-  ]);
-  const statusMap = Object.fromEntries(statuses.map((s) => [s.code, s.id]));
-  console.log(`  ✓ ${statuses.length} estados de campo`);
+  // ── Catálogos globales ──
+  const statusDefs = [
+    { code: "active", name: "En producción" },
+    { code: "harvesting", name: "En cosecha" },
+    { code: "resting", name: "En descanso" },
+    { code: "inactive", name: "Inactivo" },
+  ];
+  const statusRows = await Promise.all(
+    statusDefs.map((s, i) =>
+      prisma.fieldStatus.upsert({
+        where: { id: uuid(GROUPS.fieldStatus, i + 1) },
+        update: {},
+        create: { id: uuid(GROUPS.fieldStatus, i + 1), ...s },
+      }),
+    ),
+  );
+  const statusIdByCode = new Map(statusRows.map((s) => [s.code, s.id]));
 
-  // ── Varieties ──
-  const varieties = await Promise.all([
-    prisma.variety.upsert({ where: { code: "LCP 85-384" }, update: {}, create: { code: "LCP 85-384", name: "LCP 85-384", origin: "INTA/EEA Tucumán", cycle: "Medio", potentialYieldMin: 60, potentialYieldMax: 85, diseaseTolerance: "Resistente a roya", pestTolerance: "Tolerante a barrenador", waterRequirement: "Medio", soilPreference: "Franco arcilloso" } }),
-    prisma.variety.upsert({ where: { code: "TUCCP 77-42" }, update: {}, create: { code: "TUCCP 77-42", name: "TUCCP 77-42", origin: "INTA/EEA Tucumán", cycle: "Precoz", potentialYieldMin: 55, potentialYieldMax: 80, diseaseTolerance: "Moderadamente resistente", pestTolerance: "Moderada", waterRequirement: "Bajo-Medio", soilPreference: "Franco arenoso" } }),
-    prisma.variety.upsert({ where: { code: "RA 87-3" }, update: {}, create: { code: "RA 87-3", name: "RA 87-3", origin: "INTA/EEA Tucumán", cycle: "Tardío", potentialYieldMin: 50, potentialYieldMax: 75, diseaseTolerance: "Resistente a carbón", pestTolerance: "Tolerante", waterRequirement: "Medio-Alto", soilPreference: "Franco" } }),
-  ]);
-  const varietyMap = Object.fromEntries(varieties.map((v) => [v.code, v.id]));
-  console.log(`  ✓ ${varieties.length} variedades`);
+  const varietyDefs = [
+    {
+      code: "LCP 85-384",
+      name: "LCP 85-384",
+      origin: "INTA/EEA Tucumán",
+      cycle: "Medio",
+      potentialYieldMin: "60.00",
+      potentialYieldMax: "85.00",
+      diseaseTolerance: "Resistente a roya",
+      pestTolerance: "Tolerante a barrenador",
+      waterRequirement: "Medio",
+      soilPreference: "Franco arcilloso",
+    },
+    {
+      code: "TUCCP 77-42",
+      name: "TUCCP 77-42",
+      origin: "INTA/EEA Tucumán",
+      cycle: "Precoz",
+      potentialYieldMin: "55.00",
+      potentialYieldMax: "80.00",
+      diseaseTolerance: "Moderadamente resistente",
+      pestTolerance: "Moderada",
+      waterRequirement: "Bajo-Medio",
+      soilPreference: "Franco arenoso",
+    },
+    {
+      code: "RA 87-3",
+      name: "RA 87-3",
+      origin: "INTA/EEA Tucumán",
+      cycle: "Tardío",
+      potentialYieldMin: "50.00",
+      potentialYieldMax: "75.00",
+      diseaseTolerance: "Resistente a carbón",
+      pestTolerance: "Tolerante",
+      waterRequirement: "Medio-Alto",
+      soilPreference: "Franco",
+    },
+  ];
+  const varietyRows = await Promise.all(
+    varietyDefs.map((v, i) =>
+      prisma.variety.upsert({
+        where: { id: uuid(GROUPS.variety, i + 1) },
+        update: {},
+        create: { id: uuid(GROUPS.variety, i + 1), ...v },
+      }),
+    ),
+  );
+  const varietyIdByCode = new Map(varietyRows.map((v) => [v.code, v.id]));
 
-  // ── Campaigns ──
-  const campaigns = await Promise.all([
-    prisma.campaign.upsert({ where: { code: "2025/2026" }, update: {}, create: { code: "2025/2026", name: "Campaña 2025/2026", startDate: new Date("2025-07-01"), isActive: true } }),
-    prisma.campaign.upsert({ where: { code: "2024/2025" }, update: {}, create: { code: "2024/2025", name: "Campaña 2024/2025", startDate: new Date("2024-07-01"), endDate: new Date("2025-06-30"), isActive: false } }),
-    prisma.campaign.upsert({ where: { code: "2023/2024" }, update: {}, create: { code: "2023/2024", name: "Campaña 2023/2024", startDate: new Date("2023-07-01"), endDate: new Date("2024-06-30"), isActive: false } }),
-  ]);
-  const campaignMap = Object.fromEntries(campaigns.map((c) => [c.code, c.id]));
-  console.log(`  ✓ ${campaigns.length} campañas`);
+  const campaignDefs = [
+    { code: "2025/2026", name: "Campaña 2025/2026", startDate: new Date("2025-07-01"), isActive: true },
+    {
+      code: "2024/2025",
+      name: "Campaña 2024/2025",
+      startDate: new Date("2024-07-01"),
+      endDate: new Date("2025-06-30"),
+      isActive: false,
+    },
+  ];
+  const campaignRows = await Promise.all(
+    campaignDefs.map((c, i) =>
+      prisma.campaign.upsert({
+        where: { id: uuid(GROUPS.campaign, i + 1) },
+        update: {},
+        create: { id: uuid(GROUPS.campaign, i + 1), ...c },
+      }),
+    ),
+  );
+  const campaignIdByCode = new Map(campaignRows.map((c) => [c.code, c.id]));
 
-  // ── Activity Types ──
-  const activityTypes = await Promise.all([
-    prisma.activityType.upsert({ where: { code: "harvest" }, update: {}, create: { code: "harvest", name: "Cosecha", icon: "Combine", requiresCost: true } }),
-    prisma.activityType.upsert({ where: { code: "fertilization" }, update: {}, create: { code: "fertilization", name: "Fertilización", icon: "FlaskConical", requiresProduct: true, requiresDose: true, requiresCost: true } }),
-    prisma.activityType.upsert({ where: { code: "irrigation" }, update: {}, create: { code: "irrigation", name: "Riego", icon: "Droplets", requiresCost: true } }),
-    prisma.activityType.upsert({ where: { code: "control" }, update: {}, create: { code: "control", name: "Control", icon: "Sprout", requiresProduct: true, requiresDose: true, requiresCost: true } }),
-    prisma.activityType.upsert({ where: { code: "soil" }, update: {}, create: { code: "soil", name: "Muestreo", icon: "Cylinder" } }),
-    prisma.activityType.upsert({ where: { code: "planting" }, update: {}, create: { code: "planting", name: "Siembra", icon: "Sprout", requiresCost: true } }),
-  ]);
-  const activityTypeMap = Object.fromEntries(activityTypes.map((a) => [a.code, a.id]));
-  console.log(`  ✓ ${activityTypes.length} tipos de actividad`);
+  const activityTypeDefs = [
+    { code: "harvest", name: "Cosecha", icon: "Combine", requiresCost: true },
+    {
+      code: "fertilization",
+      name: "Fertilización",
+      icon: "FlaskConical",
+      requiresProduct: true,
+      requiresDose: true,
+      requiresCost: true,
+    },
+    { code: "irrigation", name: "Riego", icon: "Droplets", requiresCost: true },
+    {
+      code: "control",
+      name: "Control",
+      icon: "Sprout",
+      requiresProduct: true,
+      requiresDose: true,
+      requiresCost: true,
+    },
+    { code: "soil", name: "Muestreo", icon: "Cylinder" },
+    { code: "planting", name: "Siembra", icon: "Sprout", requiresCost: true },
+  ];
+  const activityTypeRows = await Promise.all(
+    activityTypeDefs.map((a, i) =>
+      prisma.activityType.upsert({
+        where: { id: uuid(GROUPS.activityType, i + 1) },
+        update: {},
+        create: { id: uuid(GROUPS.activityType, i + 1), ...a },
+      }),
+    ),
+  );
+  const activityTypeIdByCode = new Map(activityTypeRows.map((a) => [a.code, a.id]));
 
-  // ── Cost Categories ──
-  const costCategories = await Promise.all([
-    prisma.costCategory.upsert({ where: { code: "labores" }, update: {}, create: { code: "labores", name: "Labores", icon: "Tractor" } }),
-    prisma.costCategory.upsert({ where: { code: "insumos" }, update: {}, create: { code: "insumos", name: "Insumos", icon: "Package" } }),
-    prisma.costCategory.upsert({ where: { code: "cosecha" }, update: {}, create: { code: "cosecha", name: "Cosecha", icon: "Combine" } }),
-    prisma.costCategory.upsert({ where: { code: "transporte" }, update: {}, create: { code: "transporte", name: "Transporte", icon: "Truck" } }),
-  ]);
-  const costCategoryMap = Object.fromEntries(costCategories.map((c) => [c.code, c.id]));
-  console.log(`  ✓ ${costCategories.length} categorías de costo`);
+  const costCategoryDefs = [
+    { code: "labores", name: "Labores", icon: "Tractor" },
+    { code: "insumos", name: "Insumos", icon: "Package" },
+    { code: "cosecha", name: "Cosecha", icon: "Combine" },
+    { code: "transporte", name: "Transporte", icon: "Truck" },
+  ];
+  const costCategoryRows = await Promise.all(
+    costCategoryDefs.map((c, i) =>
+      prisma.costCategory.upsert({
+        where: { id: uuid(GROUPS.costCategory, i + 1) },
+        update: {},
+        create: { id: uuid(GROUPS.costCategory, i + 1), ...c },
+      }),
+    ),
+  );
+  const costCategoryIdByCode = new Map(costCategoryRows.map((c) => [c.code, c.id]));
+  console.log(
+    `  ✓ ${statusRows.length} estados, ${varietyRows.length} variedades, ${campaignRows.length} campañas, ` +
+      `${activityTypeRows.length} tipos de actividad, ${costCategoryRows.length} categorías de costo`,
+  );
 
-  // ── Company & Farm (required for multi-tenant) ──
+  // ── Empresa, establecimiento, proveedor y ajustes ──
   const company = await prisma.company.upsert({
-    where: { cuit: "30-12345678-9" },
+    where: { cuit: DEMO_CUIT },
     update: {},
     create: {
-      id: "default-company",
-      name: "SmartCaña S.A.",
-      cuit: "30-12345678-9",
+      id: uuid(GROUPS.tenant, 1),
+      name: "SmartCaña S.A. (demo)",
+      cuit: DEMO_CUIT,
       status: "active",
     },
   });
 
   const farm = await prisma.farm.upsert({
-    where: { id: "default-farm" },
+    where: { id: uuid(GROUPS.tenant, 2) },
     update: {},
     create: {
-      id: "default-farm",
+      id: uuid(GROUPS.tenant, 2),
       companyId: company.id,
       name: "Establecimiento Principal",
       location: "Tucumán, Argentina",
+      totalArea: "84.5000",
+      latitude: "-26.8328000",
+      longitude: "-65.2033000",
       status: "active",
     },
   });
-  console.log(`  ✓ ${company.name} / ${farm.name}`);
 
-  // ── Roles ──
-  const roleResults = await Promise.all(
-    roleDefs.map((r) =>
+  const supplier = await prisma.supplier.upsert({
+    where: { id: uuid(GROUPS.supplier, 1) },
+    update: {},
+    create: {
+      id: uuid(GROUPS.supplier, 1),
+      companyId: company.id,
+      name: "Proveedor Demo",
+      contactName: "Contacto Demo",
+      status: "active",
+    },
+  });
+
+  await prisma.setting.upsert({
+    where: { companyId_key: { companyId: company.id, key: "price_per_ton" } },
+    update: {},
+    create: {
+      id: uuid(GROUPS.setting, 1),
+      companyId: company.id,
+      key: "price_per_ton",
+      value: "45000",
+    },
+  });
+  console.log(`  ✓ empresa / establecimiento / proveedor / price_per_ton`);
+
+  // ── Roles y matriz de permisos ──
+  const roleRows = await Promise.all(
+    roleDefs.map((r, i) =>
       prisma.role.upsert({
         where: { companyId_code: { companyId: company.id, code: r.code } },
         update: {},
         create: {
+          id: uuid(GROUPS.role, i + 1),
           companyId: company.id,
           code: r.code,
           name: r.name,
@@ -282,224 +431,348 @@ async function seed() {
       }),
     ),
   );
-  const roleMap = Object.fromEntries(roleResults.map((r) => [r.code, r.id]));
-  console.log(`  ✓ ${roleResults.length} roles`);
+  const roleIdByCode = new Map(roleRows.map((r) => [r.code, r.id]));
 
-  // ── Role Permissions ──
-  const rolePermissionData: { roleId: string; permissionId: string }[] = [];
-  for (const r of roleDefs) {
-    const roleId = roleMap[r.code];
-    for (const permCode of r.permissions) {
-      const permissionId = permMap[permCode];
-      if (permissionId) {
-        rolePermissionData.push({ roleId, permissionId });
-      }
+  const rolePermissionRows: { id: string; roleId: string; permissionId: string }[] = [];
+  let rolePermissionIndex = 1;
+  for (const role of roleDefs) {
+    const roleId = roleIdByCode.get(role.code);
+    if (!roleId) throw new Error(`Rol no encontrado: ${role.code}`);
+    for (const code of role.permissions) {
+      const permissionId = permissionIdByCode.get(code);
+      if (!permissionId) throw new Error(`Permiso no encontrado en BD: ${code}`);
+      rolePermissionRows.push({ id: uuid(GROUPS.rolePermission, rolePermissionIndex++), roleId, permissionId });
     }
   }
-  await prisma.rolePermission.createMany({
-    data: rolePermissionData,
-    skipDuplicates: true,
-  });
-  console.log(`  ✓ ${rolePermissionData.length} role-permissions`);
+  await prisma.rolePermission.createMany({ data: rolePermissionRows, skipDuplicates: true });
+  console.log(`  ✓ ${roleRows.length} roles, ${rolePermissionRows.length} relaciones rol-permiso`);
 
-  // ── Admin User ──
-  const adminPasswordHash = bcrypt.hashSync("admin123", 10);
-  await prisma.user.upsert({
-    where: { email: "admin@smartcana.com" },
-    update: {},
-    create: {
-      companyId: company.id,
-      roleId: roleMap["admin"],
+  // ── Usuarios demo (ninguno con rol super_admin) ──
+  const demoPasswordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
+  const userDefs = [
+    {
+      key: 1,
       firstName: "Admin",
       lastName: "SmartCaña",
       email: "admin@smartcana.com",
-      passwordHash: adminPasswordHash,
+      role: "admin",
       position: "Administrador",
-      status: "active",
     },
-  });
-  console.log(`  ✓ Admin user (admin@smartcana.com)`);
-
-  // ── Fields ──
-  const fieldData = [
-    { name: "El Talita", alias: "Lote 4", area: 12.5, variety: "LCP 85-384", campaign: "2025/2026", status: "active", color: "#1DB85E", lat: -26.8328, lng: -65.2033, plantingDate: "2025-03-15", soilType: "Franco arcilloso", soilPh: 6.2, estimatedProduction: 904, healthScore: 92, lastActivity: "Cosecha", lastActivityAt: "2026-07-28T08:30:00" },
-    { name: "Los Crespo", alias: "Lote 7", area: 8.3, variety: "TUCCP 77-42", campaign: "2025/2026", status: "harvesting", color: "#F59A00", lat: -26.8456, lng: -65.2189, plantingDate: "2025-02-20", soilType: "Franco arenoso", soilPh: 5.8, estimatedProduction: 620, healthScore: 85, lastActivity: "Cosecha en curso", lastActivityAt: "2026-07-28T06:15:00" },
-    { name: "La Merced", alias: "Lote 2", area: 15.0, variety: "LCP 85-384", campaign: "2025/2026", status: "active", color: "#3B82F6", lat: -26.8201, lng: -65.1956, plantingDate: "2025-01-10", soilType: "Arcilloso", soilPh: 6.5, estimatedProduction: 985, healthScore: 68, lastActivity: "Riego", lastActivityAt: "2026-07-27T16:00:00" },
-    { name: "San Antonio", alias: "Lote 5", area: 10.2, variety: "RA 87-3", campaign: "2025/2026", status: "active", color: "#8B5CF6", lat: -26.8389, lng: -65.2104, plantingDate: "2025-04-01", soilType: "Franco", soilPh: 6.0, estimatedProduction: 710, healthScore: 78, lastActivity: "Control de malezas", lastActivityAt: "2026-07-27T11:30:00" },
-    { name: "El Ochenta", alias: "Lote 8", area: 20.0, variety: "LCP 85-384", campaign: "2024/2025", status: "resting", color: "#06B6D4", lat: -26.8550, lng: -65.2250, plantingDate: "2024-03-10", soilType: "Franco arcilloso", soilPh: 6.3, estimatedProduction: 0, healthScore: 55, lastActivity: "Barbecho", lastActivityAt: "2026-06-01T09:00:00" },
-    { name: "La Loma", alias: "Lote 1", area: 18.5, variety: "TUCCP 77-42", campaign: "2025/2026", status: "active", color: "#EC4899", lat: -26.8100, lng: -65.1900, plantingDate: "2025-02-01", soilType: "Franco arenoso", soilPh: 5.9, estimatedProduction: 1280, healthScore: 88, lastActivity: "Fertilización", lastActivityAt: "2026-07-22T10:00:00" },
-    { name: "San José", alias: "Lote 3", area: 6.8, variety: "LCP 85-384", campaign: "2025/2026", status: "inactive", color: "#EF4444", lat: -26.8280, lng: -65.2080, plantingDate: "2025-03-20", soilType: "Arcilloso pesado", soilPh: 5.5, estimatedProduction: 410, healthScore: 42, lastActivity: "Muestreo", lastActivityAt: "2026-07-26T09:00:00" },
-    { name: "Santa Rosa", alias: "Lote 6", area: 14.0, variety: "RA 87-3", campaign: "2025/2026", status: "active", color: "#84CC16", lat: -26.8420, lng: -65.2150, plantingDate: "2025-01-25", soilType: "Franco", soilPh: 6.1, estimatedProduction: 980, healthScore: 81, lastActivity: "Riego", lastActivityAt: "2026-07-25T14:00:00" },
-    { name: "El Puesto", alias: "Lote 9", area: 22.0, variety: "LCP 85-384", campaign: "2024/2025", status: "harvesting", color: "#F97316", lat: -26.8600, lng: -65.2300, plantingDate: "2024-02-15", soilType: "Franco arenoso", soilPh: 6.4, estimatedProduction: 1580, healthScore: 90, lastActivity: "Cosecha mecanizada", lastActivityAt: "2026-07-26T07:00:00" },
-    { name: "La Esperanza", alias: "Lote 10", area: 5.2, variety: "TUCCP 77-42", campaign: "2025/2026", status: "active", color: "#06B6D4", lat: -26.8150, lng: -65.2000, plantingDate: "2025-04-15", soilType: "Franco", soilPh: 6.0, estimatedProduction: 350, healthScore: 72, lastActivity: "Fertilización", lastActivityAt: "2026-07-18T08:00:00" },
+    {
+      key: 2,
+      firstName: "Ana",
+      lastName: "Ingeniera",
+      email: "ingeniero@smartcana.com",
+      role: "ingeniero",
+      position: "Ingeniera agrónoma",
+    },
+    {
+      key: 3,
+      firstName: "Carlos",
+      lastName: "Operador",
+      email: "operador@smartcana.com",
+      role: "operador",
+      position: "Operador de campo",
+    },
   ];
-
-  const fields = await Promise.all(
-    fieldData.map((f) =>
-      prisma.field.upsert({
-        where: { id: f.name.toLowerCase().replace(/\s+/g, "-") },
+  await Promise.all(
+    userDefs.map((u) => {
+      const roleId = roleIdByCode.get(u.role);
+      if (!roleId) throw new Error(`Rol no encontrado para usuario demo: ${u.role}`);
+      return prisma.user.upsert({
+        where: { email: u.email },
         update: {},
         create: {
-          id: f.name.toLowerCase().replace(/\s+/g, "-"),
+          id: uuid(GROUPS.user, u.key),
+          companyId: company.id,
+          roleId,
+          firstName: u.firstName,
+          lastName: u.lastName,
+          email: u.email,
+          passwordHash: demoPasswordHash,
+          position: u.position,
+          status: "active",
+        },
+      });
+    }),
+  );
+  console.log(`  ✓ ${userDefs.length} usuarios demo (admin, ingeniero, operador)`);
+
+  // ── Campos ──
+  const fieldDefs = [
+    {
+      key: 1,
+      name: "El Talita",
+      alias: "Lote 4",
+      area: "12.5000",
+      status: "active",
+      variety: "LCP 85-384",
+      campaign: "2025/2026",
+      plantingDate: "2025-03-15",
+      soilType: "Franco arcilloso",
+      soilPh: "6.20",
+      estimatedProduction: "904.00",
+      healthScore: 92,
+      shiLevel: "excelente",
+      lastActivity: "Cosecha",
+      lastActivityAt: "2026-07-28T08:30:00Z",
+      color: "#1DB85E",
+      latitude: "-26.8328000",
+      longitude: "-65.2033000",
+    },
+    {
+      key: 2,
+      name: "Los Crespo",
+      alias: "Lote 7",
+      area: "8.3000",
+      status: "harvesting",
+      variety: "TUCCP 77-42",
+      campaign: "2025/2026",
+      plantingDate: "2025-02-20",
+      soilType: "Franco arenoso",
+      soilPh: "5.80",
+      estimatedProduction: "620.00",
+      healthScore: 85,
+      shiLevel: "excelente",
+      lastActivity: "Cosecha en curso",
+      lastActivityAt: "2026-07-28T06:15:00Z",
+      color: "#F59A00",
+      latitude: "-26.8456000",
+      longitude: "-65.2189000",
+    },
+    {
+      key: 3,
+      name: "La Merced",
+      alias: "Lote 2",
+      area: "15.0000",
+      status: "active",
+      variety: "LCP 85-384",
+      campaign: "2025/2026",
+      plantingDate: "2025-01-10",
+      soilType: "Arcilloso",
+      soilPh: "6.50",
+      estimatedProduction: "985.00",
+      healthScore: 68,
+      shiLevel: "bueno",
+      lastActivity: "Riego",
+      lastActivityAt: "2026-07-27T16:00:00Z",
+      color: "#3B82F6",
+      latitude: "-26.8201000",
+      longitude: "-65.1956000",
+    },
+  ];
+  const fieldRows = await Promise.all(
+    fieldDefs.map((f) => {
+      const fieldStatusId = statusIdByCode.get(f.status);
+      const varietyId = varietyIdByCode.get(f.variety);
+      if (!fieldStatusId || !varietyId) throw new Error(`Catálogo incompleto para campo ${f.name}`);
+      return prisma.field.upsert({
+        where: { id: uuid(GROUPS.field, f.key) },
+        update: {},
+        create: {
+          id: uuid(GROUPS.field, f.key),
           farmId: farm.id,
           name: f.name,
           description: f.alias,
           areaHectares: f.area,
-          fieldStatusId: statusMap[f.status],
-          varietyId: varietyMap[f.variety],
+          fieldStatusId,
+          varietyId,
           plantingDate: new Date(f.plantingDate),
           soilType: f.soilType,
           soilPh: f.soilPh,
           estimatedProduction: f.estimatedProduction,
           healthScore: f.healthScore,
           shiScore: f.healthScore,
-          shiLevel: f.healthScore >= 80 ? 'excelente' : f.healthScore >= 60 ? 'bueno' : f.healthScore >= 40 ? 'regular' : 'critico',
-          shiCalculatedAt: new Date(),
+          shiLevel: f.shiLevel,
+          shiCalculatedAt: new Date("2026-07-28T12:00:00Z"),
           lastActivity: f.lastActivity,
           lastActivityAt: new Date(f.lastActivityAt),
           color: f.color,
-          latitude: f.lat,
-          longitude: f.lng,
+          latitude: f.latitude,
+          longitude: f.longitude,
           campaignCode: f.campaign,
           ratoonNumber: 1,
         },
-      })
-    )
+      });
+    }),
   );
-  console.log(`  ✓ ${fields.length} campos`);
+  const fieldIdByName = new Map(fieldRows.map((f) => [f.name, f.id]));
+  console.log(`  ✓ ${fieldRows.length} campos`);
 
-  // ── Activities ──
-  const activitiesData = [
+  // ── Actividades ──
+  const activityDefs = [
     { field: "El Talita", type: "harvest", title: "Cosecha finalizada", date: "2026-07-28", campaign: "2025/2026" },
-    { field: "El Talita", type: "fertilization", title: "Fertilización nitrogenada", date: "2026-06-15", campaign: "2025/2026" },
-    { field: "El Talita", type: "control", title: "Control de malezas", date: "2026-05-20", campaign: "2025/2026" },
-    { field: "El Talita", type: "soil", title: "Muestreo de suelo", date: "2026-04-10", campaign: "2025/2026" },
+    {
+      field: "El Talita",
+      type: "fertilization",
+      title: "Fertilización nitrogenada",
+      date: "2026-06-15",
+      campaign: "2025/2026",
+    },
     { field: "Los Crespo", type: "harvest", title: "Inicio de cosecha", date: "2026-07-25", campaign: "2025/2026" },
-    { field: "Los Crespo", type: "fertilization", title: "Fertilización potásica", date: "2026-05-30", campaign: "2025/2026" },
+    {
+      field: "Los Crespo",
+      type: "fertilization",
+      title: "Fertilización potásica",
+      date: "2026-05-30",
+      campaign: "2025/2026",
+    },
     { field: "La Merced", type: "irrigation", title: "Riego programado", date: "2026-07-27", campaign: "2025/2026" },
-    { field: "La Merced", type: "fertilization", title: "Fertilización foliar", date: "2026-07-10", campaign: "2025/2026" },
-    { field: "San Antonio", type: "control", title: "Control de malezas", date: "2026-07-27", campaign: "2025/2026" },
-    { field: "San Antonio", type: "fertilization", title: "Fertilización nitrogenada", date: "2026-06-20", campaign: "2025/2026" },
-    { field: "La Loma", type: "fertilization", title: "Fertilización nitrogenada", date: "2026-07-22", campaign: "2025/2026" },
-    { field: "La Loma", type: "control", title: "Control de malezas", date: "2026-06-28", campaign: "2025/2026" },
-    { field: "Santa Rosa", type: "irrigation", title: "Riego por pivote", date: "2026-07-25", campaign: "2025/2026" },
-    { field: "Santa Rosa", type: "fertilization", title: "Fertilización potásica", date: "2026-07-05", campaign: "2025/2026" },
-    { field: "El Puesto", type: "harvest", title: "Cosecha mecanizada", date: "2026-07-26", campaign: "2024/2025" },
-    { field: "El Puesto", type: "control", title: "Control de malezas", date: "2026-06-10", campaign: "2024/2025" },
-    { field: "La Esperanza", type: "fertilization", title: "Fertilización nitrogenada", date: "2026-07-18", campaign: "2025/2026" },
+    {
+      field: "La Merced",
+      type: "fertilization",
+      title: "Fertilización foliar",
+      date: "2026-07-10",
+      campaign: "2025/2026",
+    },
   ];
-
-  const fieldIndex = Object.fromEntries(fields.map((f) => [f.name, f.id]));
-
   await Promise.all(
-    activitiesData.map((a) =>
-      prisma.activity.upsert({
-        where: { id: `${fieldIndex[a.field]}-${a.type}-${a.date}` },
+    activityDefs.map((a, i) => {
+      const fieldId = fieldIdByName.get(a.field);
+      const activityTypeId = activityTypeIdByCode.get(a.type);
+      const campaignId = campaignIdByCode.get(a.campaign);
+      if (!fieldId || !activityTypeId || !campaignId) throw new Error(`Referencia incompleta en actividad ${a.title}`);
+      return prisma.activity.upsert({
+        where: { id: uuid(GROUPS.activity, i + 1) },
         update: {},
         create: {
-          id: `${fieldIndex[a.field]}-${a.type}-${a.date}`,
-          fieldId: fieldIndex[a.field],
-          activityTypeId: activityTypeMap[a.type],
-          campaignId: campaignMap[a.campaign] || campaignMap["2025/2026"],
+          id: uuid(GROUPS.activity, i + 1),
+          fieldId,
+          activityTypeId,
+          campaignId,
           activityDate: new Date(a.date),
           title: a.title,
         },
-      })
-    )
+      });
+    }),
   );
-  console.log(`  ✓ ${activitiesData.length} actividades`);
+  console.log(`  ✓ ${activityDefs.length} actividades`);
 
-  // ── Costs ──
-  const costsData = [
-    { field: "El Talita", category: "labores", amount: 42000, campaign: "2025/2026", date: "2026-07-01" },
-    { field: "El Talita", category: "insumos", amount: 31000, campaign: "2025/2026", date: "2026-06-01" },
-    { field: "El Talita", category: "cosecha", amount: 24000, campaign: "2025/2026", date: "2026-07-28" },
-    { field: "El Talita", category: "transporte", amount: 8500, campaign: "2025/2026", date: "2026-07-28" },
-    { field: "Los Crespo", category: "labores", amount: 28000, campaign: "2025/2026", date: "2026-07-01" },
-    { field: "Los Crespo", category: "insumos", amount: 22000, campaign: "2025/2026", date: "2026-06-01" },
-    { field: "Los Crespo", category: "cosecha", amount: 18000, campaign: "2025/2026", date: "2026-07-25" },
-    { field: "Los Crespo", category: "transporte", amount: 6000, campaign: "2025/2026", date: "2026-07-25" },
-    { field: "La Merced", category: "labores", amount: 52000, campaign: "2025/2026", date: "2026-07-01" },
-    { field: "La Merced", category: "insumos", amount: 38000, campaign: "2025/2026", date: "2026-06-01" },
-    { field: "La Merced", category: "cosecha", amount: 29000, campaign: "2025/2026", date: "2026-07-27" },
-    { field: "La Merced", category: "transporte", amount: 11000, campaign: "2025/2026", date: "2026-07-27" },
+  // ── Costos ──
+  const costDefs = [
+    { field: "El Talita", category: "labores", amount: "42000.00", campaign: "2025/2026", date: "2026-07-01" },
+    { field: "El Talita", category: "insumos", amount: "31000.00", campaign: "2025/2026", date: "2026-06-01" },
+    { field: "Los Crespo", category: "labores", amount: "28000.00", campaign: "2025/2026", date: "2026-07-01" },
+    { field: "Los Crespo", category: "cosecha", amount: "18000.00", campaign: "2025/2026", date: "2026-07-25" },
+    { field: "La Merced", category: "labores", amount: "52000.00", campaign: "2025/2026", date: "2026-07-01" },
+    { field: "La Merced", category: "cosecha", amount: "29000.00", campaign: "2025/2026", date: "2026-07-27" },
   ];
-
   await Promise.all(
-    costsData.map((c, i) =>
-      prisma.cost.create({
-        data: {
+    costDefs.map((c, i) => {
+      const fieldId = fieldIdByName.get(c.field);
+      const costCategoryId = costCategoryIdByCode.get(c.category);
+      const campaignId = campaignIdByCode.get(c.campaign);
+      if (!fieldId || !costCategoryId || !campaignId) throw new Error(`Referencia incompleta en costo ${i + 1}`);
+      return prisma.cost.upsert({
+        where: { id: uuid(GROUPS.cost, i + 1) },
+        update: {},
+        create: {
+          id: uuid(GROUPS.cost, i + 1),
           companyId: company.id,
           farmId: farm.id,
-          fieldId: fieldIndex[c.field],
-          costCategoryId: costCategoryMap[c.category],
-          campaignId: campaignMap[c.campaign],
+          fieldId,
+          costCategoryId,
+          supplierId: i === 0 ? supplier.id : null,
+          campaignId,
           costDate: new Date(c.date),
           amount: c.amount,
           description: `Costo de ${c.category} - ${c.field}`,
         },
-      })
-    )
+      });
+    }),
   );
-  console.log(`  ✓ ${costsData.length} costos`);
+  console.log(`  ✓ ${costDefs.length} costos`);
 
-  // ── Harvests ──
-  const harvestsData = [
-    { field: "El Talita", campaign: "2025/2026", variety: "LCP 85-384", tons: 904, yield: 72.3, date: "2026-07-28", method: "Mecánico" },
-    { field: "Los Crespo", campaign: "2025/2026", variety: "TUCCP 77-42", tons: 620, yield: 74.7, date: "2026-07-25", method: "Mecánico" },
-    { field: "La Merced", campaign: "2025/2026", variety: "LCP 85-384", tons: 985, yield: 65.7, date: "2026-07-27", method: "Mecánico" },
-    { field: "El Puesto", campaign: "2024/2025", variety: "LCP 85-384", tons: 1510, yield: 68.6, date: "2026-07-26", method: "Mecánico" },
+  // ── Cosechas ──
+  const harvestDefs = [
+    {
+      field: "El Talita",
+      campaign: "2025/2026",
+      variety: "LCP 85-384",
+      tons: "904.00",
+      yield: "72.30",
+      date: "2026-07-28",
+      sucrose: "12.40",
+      humidity: "13.50",
+    },
+    {
+      field: "Los Crespo",
+      campaign: "2025/2026",
+      variety: "TUCCP 77-42",
+      tons: "620.00",
+      yield: "74.70",
+      date: "2026-07-25",
+      sucrose: "11.80",
+      humidity: "14.00",
+    },
+    {
+      field: "La Merced",
+      campaign: "2025/2026",
+      variety: "LCP 85-384",
+      tons: "985.00",
+      yield: "65.70",
+      date: "2026-07-27",
+      sucrose: "12.10",
+      humidity: "13.80",
+    },
   ];
-
   await Promise.all(
-    harvestsData.map((h) =>
-      prisma.harvest.create({
-        data: {
+    harvestDefs.map((h, i) => {
+      const fieldId = fieldIdByName.get(h.field);
+      const campaignId = campaignIdByCode.get(h.campaign);
+      const varietyId = varietyIdByCode.get(h.variety);
+      if (!fieldId || !campaignId || !varietyId) throw new Error(`Referencia incompleta en cosecha ${h.field}`);
+      return prisma.harvest.upsert({
+        where: { id: uuid(GROUPS.harvest, i + 1) },
+        update: {},
+        create: {
+          id: uuid(GROUPS.harvest, i + 1),
           companyId: company.id,
           farmId: farm.id,
-          fieldId: fieldIndex[h.field],
-          campaignId: campaignMap[h.campaign],
-          varietyId: varietyMap[h.variety],
+          fieldId,
+          campaignId,
+          varietyId,
           startDate: new Date(h.date),
           tons: h.tons,
           tonsPerHectare: h.yield,
           estimatedYield: h.yield,
-          method: h.method,
-          status: 'completed',
-          qualityGrade: h.tons > 800 ? 'A' : 'B',
-          sucrosePercentage: 11.5 + Math.random() * 2.5,
-          humidity: 12 + Math.random() * 4,
+          method: "Mecánico",
+          status: "completed",
+          qualityGrade: "A",
+          sucrosePercentage: h.sucrose,
+          humidity: h.humidity,
         },
-      })
-    )
+      });
+    }),
   );
-  console.log(`  ✓ ${harvestsData.length} cosechas`);
+  console.log(`  ✓ ${harvestDefs.length} cosechas`);
 
-  // ── Alerts ──
-  const alertsData = [
+  // ── Alertas de campos ──
+  const alertDefs = [
     { field: "El Talita", type: "warning", title: "Monitorear plagas post-cosecha", priority: "medium" },
     { field: "La Merced", type: "warning", title: "Bajo rendimiento esperado vs. potencial", priority: "high" },
     { field: "La Merced", type: "info", title: "Próximo muestreo de suelo recomendado", priority: "low" },
-    { field: "El Ochenta", type: "info", title: "Planificar siembra próxima campaña", priority: "medium" },
-    { field: "San José", type: "critical", title: "Rendimiento crítico: intervención urgente", priority: "critical" },
-    { field: "San José", type: "warning", title: "pH fuera de rango óptimo", priority: "high" },
   ];
-
   await Promise.all(
-    alertsData.map((a) =>
-      prisma.fieldAlert.create({
-        data: {
-          fieldId: fieldIndex[a.field],
+    alertDefs.map((a, i) => {
+      const fieldId = fieldIdByName.get(a.field);
+      if (!fieldId) throw new Error(`Campo no encontrado para alerta ${a.title}`);
+      return prisma.fieldAlert.upsert({
+        where: { id: uuid(GROUPS.alert, i + 1) },
+        update: {},
+        create: {
+          id: uuid(GROUPS.alert, i + 1),
+          fieldId,
           type: a.type,
           title: a.title,
           priority: a.priority,
         },
-      })
-    )
+      });
+    }),
   );
-  console.log(`  ✓ ${alertsData.length} alertas`);
+  console.log(`  ✓ ${alertDefs.length} alertas`);
 
-  console.log("\n✅ Seed completado exitosamente");
+  console.log("\n✅ Seed de desarrollo completado. Credenciales demo exclusivas de desarrollo.");
 }
 
 seed()
