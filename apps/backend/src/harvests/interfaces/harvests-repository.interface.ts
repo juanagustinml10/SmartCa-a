@@ -48,17 +48,29 @@ export interface HarvestAnalytics {
 }
 
 export interface IHarvestsRepository {
-  findAll(query: QueryHarvestDto): Promise<PaginatedResult<Harvest>>;
-  findById(id: string): Promise<HarvestWithRelations | null>;
-  create(dto: CreateHarvestDto): Promise<Harvest>;
-  update(id: string, dto: UpdateHarvestDto): Promise<Harvest>;
-  softDelete(id: string): Promise<Harvest>;
-  getAnalytics(filters: {
-    companyId?: string;
-    farmId?: string;
-    fieldId?: string;
-    campaignId?: string;
-    startDate?: string;
-    endDate?: string;
-  }): Promise<HarvestAnalytics>;
+  findAll(
+    companyId: string,
+    query: QueryHarvestDto,
+  ): Promise<PaginatedResult<Harvest>>;
+  findById(
+    companyId: string,
+    id: string,
+  ): Promise<HarvestWithRelations | null>;
+  create(companyId: string, dto: CreateHarvestDto): Promise<Harvest>;
+  update(
+    companyId: string,
+    id: string,
+    dto: UpdateHarvestDto,
+  ): Promise<Harvest>;
+  softDelete(companyId: string, id: string): Promise<Harvest>;
+  getAnalytics(
+    companyId: string,
+    filters: {
+      farmId?: string;
+      fieldId?: string;
+      campaignId?: string;
+      startDate?: string;
+      endDate?: string;
+    },
+  ): Promise<HarvestAnalytics>;
 }

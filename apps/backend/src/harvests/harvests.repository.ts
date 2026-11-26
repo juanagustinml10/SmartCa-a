@@ -15,12 +15,16 @@ import type { Harvest, Prisma } from '../generated/prisma/client.js';
 export class HarvestsRepository implements IHarvestsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: QueryHarvestDto): Promise<PaginatedResult<Harvest>> {
+  async findAll(
+    companyId: string,
+    query: QueryHarvestDto,
+  ): Promise<PaginatedResult<Harvest>> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.HarvestWhereInput = { deletedAt: null };
+    // `query.companyId` se ignora: el único ámbito válido es el del JWT.
+    const where: Prisma.HarvestWhereInput = { companyId, deletedAt: null };
     if (query.search) {
       where.OR = [
         { method: { contains: query.search, mode: 'insensitive' } },
@@ -28,7 +32,6 @@ export class HarvestsRepository implements IHarvestsRepository {
         { observations: { contains: query.search, mode: 'insensitive' } },
       ];
     }
-    if (query.companyId) where.companyId = query.companyId;
     if (query.farmId) where.farmId = query.farmId;
     if (query.fieldId) where.fieldId = query.fieldId;
     if (query.campaignId) where.campaignId = query.campaignId;
@@ -84,9 +87,12 @@ export class HarvestsRepository implements IHarvestsRepository {
     };
   }
 
-  async findById(id: string): Promise<HarvestWithRelations | null> {
+  async findById(
+    companyId: string,
+    id: string,
+  ): Promise<HarvestWithRelations | null> {
     return this.prisma.harvest.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, companyId, deletedAt: null },
       include: {
         field: { select: { id: true, name: true } },
         farm: { select: { id: true, name: true } },
@@ -96,10 +102,10 @@ export class HarvestsRepository implements IHarvestsRepository {
     });
   }
 
-  async create(dto: CreateHarvestDto): Promise<Harvest> {
+  async create(companyId: string, dto: CreateHarvestDto): Promise<Harvest> {
     return this.prisma.harvest.create({
       data: {
-        companyId: dto.companyId,
+        companyId,
         farmId: dto.farmId,
         fieldId: dto.fieldId,
         campaignId: dto.campaignId,
@@ -123,9 +129,13 @@ export class HarvestsRepository implements IHarvestsRepository {
     });
   }
 
-  async update(id: string, dto: UpdateHarvestDto): Promise<Harvest> {
+  async update(
+    companyId: string,
+    id: string,
+    dto: UpdateHarvestDto,
+  ): Promise<Harvest> {
     const data: Record<string, unknown> = {};
-    if (dto.companyId !== undefined) data.companyId = dto.companyId;
+    // `dto.companyId` se descarta: las cosechas no se mueven entre empresas.
     if (dto.farmId !== undefined) data.farmId = dto.farmId;
     if (dto.fieldId !== undefined) data.fieldId = dto.fieldId;
     if (dto.campaignId !== undefined) data.campaignId = dto.campaignId;
@@ -147,26 +157,27 @@ export class HarvestsRepository implements IHarvestsRepository {
     if (dto.status !== undefined) data.status = dto.status;
     if (dto.attachments !== undefined) data.attachments = dto.attachments;
     if (dto.observations !== undefined) data.observations = dto.observations;
-    return this.prisma.harvest.update({ where: { id }, data });
+    return this.prisma.harvest.update({ where: { id, companyId }, data });
   }
 
-  async softDelete(id: string): Promise<Harvest> {
+  async softDelete(companyId: string, id: string): Promise<Harvest> {
     return this.prisma.harvest.update({
-      where: { id },
+      where: { id, companyId },
       data: { deletedAt: new Date() },
     });
   }
 
-  async getAnalytics(filters: {
-    companyId?: string;
-    farmId?: string;
-    fieldId?: string;
-    campaignId?: string;
-    startDate?: string;
-    endDate?: string;
-  }): Promise<HarvestAnalytics> {
-    const where: Prisma.HarvestWhereInput = { deletedAt: null };
-    if (filters.companyId) where.companyId = filters.companyId;
+  async getAnalytics(
+    companyId: string,
+    filters: {
+      farmId?: string;
+      fieldId?: string;
+      campaignId?: string;
+      startDate?: string;
+      endDate?: string;
+    },
+  ): Promise<HarvestAnalytics> {
+    const where: Prisma.HarvestWhereInput = { companyId, deletedAt: null };
     if (filters.farmId) where.farmId = filters.farmId;
     if (filters.fieldId) where.fieldId = filters.fieldId;
     if (filters.campaignId) where.campaignId = filters.campaignId;

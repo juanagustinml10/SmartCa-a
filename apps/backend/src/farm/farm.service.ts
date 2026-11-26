@@ -12,8 +12,9 @@ export class FarmService {
     return this.repository.findAll(companyId);
   }
 
-  async findById(id: string): Promise<Farm> {
-    const farm = await this.repository.findById(id);
+  async findById(companyId: string, id: string): Promise<Farm> {
+    // El ID nunca basta: el filtro por empresa ocurre en el repositorio.
+    const farm = await this.repository.findById(companyId, id);
     if (!farm)
       throw new NotFoundException(
         `Establecimiento con ID "${id}" no encontrado`,
@@ -25,13 +26,17 @@ export class FarmService {
     return this.repository.create(companyId, dto);
   }
 
-  async update(id: string, dto: UpdateFarmDto): Promise<Farm> {
-    await this.findById(id);
-    return this.repository.update(id, dto);
+  async update(
+    companyId: string,
+    id: string,
+    dto: UpdateFarmDto,
+  ): Promise<Farm> {
+    await this.findById(companyId, id);
+    return this.repository.update(companyId, id, dto);
   }
 
-  async remove(id: string): Promise<void> {
-    await this.findById(id);
-    await this.repository.softDelete(id);
+  async remove(companyId: string, id: string): Promise<void> {
+    await this.findById(companyId, id);
+    await this.repository.softDelete(companyId, id);
   }
 }

@@ -1,29 +1,38 @@
+import 'reflect-metadata';
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { App } from 'supertest/types';
-import { AppModule } from './../src/app.module';
+import { AppController } from '../src/app.controller.js';
+import { AppService } from '../src/app.service.js';
 
+/**
+ * E2E mínimo y sin base de datos: verifica el arranque HTTP y el endpoint de
+ * salud. No importa AppModule para no requerir secretos ni conexión real.
+ * Las pruebas de autenticación/tenancy están en `src/security/*.spec.ts`.
+ */
 describe('AppController (e2e)', () => {
-  let app: INestApplication<App>;
+  let app: INestApplication;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
+      controllers: [AppController],
+      providers: [AppService],
     }).compile();
 
     app = moduleFixture.createNestApplication();
     await app.init();
   });
 
-  it('/ (GET)', () => {
-    return request(app.getHttpServer())
-      .get('/')
-      .expect(200)
-      .expect('Hello World!');
+  it('/health (GET)', async () => {
+    const res = await request(app.getHttpServer()).get('/health').expect(200);
+    expect(res.body).toMatchObject({
+      status: 'ok',
+      name: 'SmartCaña API',
+      version: '0.1.0',
+    });
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     await app.close();
   });
 });

@@ -1,5 +1,4 @@
 import { api } from "./api";
-import { MOCK_FIELDS } from "./mock-fields";
 import type { FieldData, HistoricalProduction, FieldCost, FieldActivity, FieldAlert } from "@/types/fields";
 
 interface BackendField {
@@ -15,6 +14,9 @@ interface BackendField {
   soilPh: number | null;
   estimatedProduction: number | null;
   healthScore: number | null;
+  shiScore?: number | null;
+  shiLevel?: string | null;
+  shiCalculatedAt?: string | null;
   lastActivity: string | null;
   lastActivityAt: string | null;
   color: string | null;
@@ -49,7 +51,7 @@ interface BackendHarvest {
   campaign: { code: string; name: string };
   tons: number;
   estimatedYield: number | null;
-  harvestDate: string;
+  startDate: string;
 }
 
 interface BackendAlert {
@@ -100,6 +102,9 @@ function mapField(b: BackendField): FieldData {
     status,
     estimatedProduction: Number(b.estimatedProduction ?? 0),
     healthScore: b.healthScore ?? 50,
+    shiScore: b.shiScore ?? null,
+    shiLevel: b.shiLevel ?? null,
+    shiCalculatedAt: b.shiCalculatedAt ?? null,
     lastActivity: b.lastActivity ?? "",
     lastActivityDate: b.lastActivityAt ?? "",
     color: b.color ?? "#1DB85E",
@@ -115,6 +120,12 @@ function mapField(b: BackendField): FieldData {
     costs,
     activities,
     alerts,
+    harvests: (b.harvests ?? []).map((h) => ({
+      id: h.id,
+      campaignName: h.campaign?.name || h.campaign?.code || "",
+      tons: Number(h.tons),
+      startDate: h.startDate,
+    })),
   };
 }
 
@@ -138,33 +149,16 @@ function buildHistoricalProduction(harvests: BackendHarvest[]): HistoricalProduc
   }));
 }
 
-let useMockFallback = false;
-
+// Sin fallback mock: un 401/403/500 se propaga para que la UI lo muestre.
 export async function fetchFields(): Promise<{ data: FieldData[]; meta: Record<string, unknown> | null }> {
-  if (useMockFallback) return { data: MOCK_FIELDS, meta: null };
-
-  try {
-    const res = await api.get<BackendField[]>("/fields");
-    const data = (res.data ?? []).map(mapField);
-    return { data, meta: res.meta ?? null };
-  } catch {
-    useMockFallback = true;
-    console.warn("Backend unavailable — using mock data");
-    return { data: MOCK_FIELDS, meta: null };
-  }
+  const res = await api.get<BackendField[]>("/fields");
+  const data = (res.data ?? []).map(mapField);
+  return { data, meta: res.meta ?? null };
 }
 
 export async function fetchFieldById(id: string): Promise<FieldData | null> {
-  if (useMockFallback) return MOCK_FIELDS.find((f) => f.id === id) ?? null;
-
-  try {
-    const res = await api.get<BackendField>(`/fields/${id}`);
-    return res.data ? mapField(res.data) : null;
-  } catch {
-    useMockFallback = true;
-    console.warn("Backend unavailable — using mock data");
-    return MOCK_FIELDS.find((f) => f.id === id) ?? null;
-  }
+  const res = await api.get<BackendField>(`/fields/${id}`);
+  return res.data ? mapField(res.data) : null;
 }
 
 export async function createField(data: Partial<FieldData>): Promise<FieldData> {

@@ -18,95 +18,97 @@ export class CostsService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async findAll(query: QueryCostDto): Promise<PaginatedResult<Cost>> {
-    return this.repository.findAll(query);
+  async findAll(
+    companyId: string,
+    query: QueryCostDto,
+  ): Promise<PaginatedResult<Cost>> {
+    return this.repository.findAll(companyId, query);
   }
 
-  async findById(id: string): Promise<CostWithRelations> {
-    const cost = await this.repository.findById(id);
+  async findById(companyId: string, id: string): Promise<CostWithRelations> {
+    const cost = await this.repository.findById(companyId, id);
     if (!cost)
       throw new NotFoundException(`Costo con ID "${id}" no encontrado`);
     return cost;
   }
 
-  async create(dto: CreateCostDto): Promise<Cost> {
+  async create(companyId: string, dto: CreateCostDto): Promise<Cost> {
     await this.validateReferences(
-      dto.companyId,
+      companyId,
       dto.farmId,
       dto.fieldId,
       dto.costCategoryId,
       dto.supplierId,
       dto.campaignId,
       dto.activityId,
+      dto.userId,
     );
-    return this.repository.create(dto);
+    // dto.companyId existe por compatibilidad del DTO, pero nunca se usa.
+    return this.repository.create(companyId, dto);
   }
 
-  async update(id: string, dto: UpdateCostDto): Promise<Cost> {
-    const cost = await this.repository.findById(id);
-    if (!cost)
-      throw new NotFoundException(`Costo con ID "${id}" no encontrado`);
+  async update(
+    companyId: string,
+    id: string,
+    dto: UpdateCostDto,
+  ): Promise<Cost> {
+    const cost = await this.findById(companyId, id);
     if (
-      dto.companyId ||
       dto.farmId ||
       dto.fieldId ||
       dto.costCategoryId ||
       dto.supplierId ||
       dto.campaignId ||
-      dto.activityId
+      dto.activityId ||
+      dto.userId
     ) {
       await this.validateReferences(
-        dto.companyId ?? cost.companyId,
+        companyId,
         dto.farmId ?? cost.farmId ?? undefined,
         dto.fieldId ?? cost.fieldId ?? undefined,
         dto.costCategoryId ?? cost.costCategoryId,
         dto.supplierId ?? cost.supplierId ?? undefined,
         dto.campaignId ?? cost.campaignId,
         dto.activityId ?? cost.activityId ?? undefined,
+        dto.userId ?? cost.userId ?? undefined,
       );
     }
-    return this.repository.update(id, dto);
+    // dto.companyId se ignora: un costo no puede cambiar de empresa.
+    return this.repository.update(companyId, id, dto);
   }
 
-  async remove(id: string): Promise<void> {
-    const cost = await this.repository.findById(id);
-    if (!cost)
-      throw new NotFoundException(`Costo con ID "${id}" no encontrado`);
-    await this.repository.softDelete(id);
+  async remove(companyId: string, id: string): Promise<void> {
+    await this.findById(companyId, id);
+    await this.repository.softDelete(companyId, id);
   }
 
-  async getAnalytics(filters: {
-    companyId?: string;
-    farmId?: string;
-    fieldId?: string;
-    campaignId?: string;
-    startDate?: string;
-    endDate?: string;
-  }): Promise<CostAnalytics> {
-    return this.repository.getAnalytics(filters);
+  async getAnalytics(
+    companyId: string,
+    filters: {
+      farmId?: string;
+      fieldId?: string;
+      campaignId?: string;
+      startDate?: string;
+      endDate?: string;
+    },
+  ): Promise<CostAnalytics> {
+    return this.repository.getAnalytics(companyId, filters);
   }
 
+  /** Todas las referencias se validan dentro de la empresa del token. */
   private async validateReferences(
-    companyId?: string,
+    companyId: string,
     farmId?: string,
     fieldId?: string,
     costCategoryId?: string,
     supplierId?: string,
     campaignId?: string,
     activityId?: string,
+    userId?: string,
   ): Promise<void> {
-    if (companyId) {
-      const company = await this.prisma.company.findFirst({
-        where: { id: companyId, deletedAt: null },
-      });
-      if (!company)
-        throw new NotFoundException(
-          `Empresa con ID "${companyId}" no encontrada`,
-        );
-    }
     if (farmId) {
       const farm = await this.prisma.farm.findFirst({
-        where: { id: farmId, deletedAt: null },
+        where: { id: farmId, companyId, deletedAt: null },
       });
       if (!farm)
         throw new NotFoundException(
@@ -115,7 +117,7 @@ export class CostsService {
     }
     if (fieldId) {
       const field = await this.prisma.field.findFirst({
-        where: { id: fieldId, deletedAt: null },
+        where: { id: fieldId, farm: { companyId }, deletedAt: null },
       });
       if (!field)
         throw new NotFoundException(`Campo con ID "${fieldId}" no encontrado`);
@@ -131,7 +133,7 @@ export class CostsService {
     }
     if (supplierId) {
       const sup = await this.prisma.supplier.findFirst({
-        where: { id: supplierId, deletedAt: null },
+        where: { id: supplierId, companyId, deletedAt: null },
       });
       if (!sup)
         throw new NotFoundException(
@@ -149,12 +151,23 @@ export class CostsService {
     }
     if (activityId) {
       const act = await this.prisma.activity.findFirst({
-        where: { id: activityId, deletedAt: null },
+        where: {
+          id: activityId,
+          deletedAt: null,
+          field: { farm: { companyId } },
+        },
       });
       if (!act)
         throw new NotFoundException(
           `Actividad con ID "${activityId}" no encontrada`,
         );
+    }
+    if (userId) {
+      const user = await this.prisma.user.findFirst({
+        where: { id: userId, companyId, deletedAt: null },
+      });
+      if (!user)
+        throw new NotFoundException(`Usuario con ID "${userId}" no encontrado`);
     }
   }
 }

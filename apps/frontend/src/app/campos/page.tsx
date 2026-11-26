@@ -9,7 +9,6 @@ import { FieldTable } from "@/components/campos/field-table";
 import { EmptyState } from "@/components/campos/empty-state";
 import { FieldCardSkeleton, FieldTableSkeleton } from "@/components/campos/field-skeleton";
 import { fetchFields } from "@/lib/api-fields";
-import { MOCK_FIELDS } from "@/lib/mock-fields";
 import type { FieldFiltersState, ViewMode, FieldSortKey } from "@/types/fields";
 import type { FieldData } from "@/types/fields";
 
@@ -23,7 +22,7 @@ const defaultFilters: FieldFiltersState = {
 };
 
 export default function CamposPage() {
-  const [fields, setFields] = useState<FieldData[]>(MOCK_FIELDS);
+  const [fields, setFields] = useState<FieldData[]>([]);
   const [filters, setFilters] = useState<FieldFiltersState>(defaultFilters);
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [loading, setLoading] = useState(true);
@@ -35,9 +34,8 @@ export default function CamposPage() {
     fetchFields()
       .then((res) => {
         if (!mounted) return;
-        if (res.data && res.data.length > 0) {
-          setFields(res.data);
-        }
+        // La lista vacía es un resultado válido del backend, no un error.
+        setFields(res.data ?? []);
       })
       .catch((err) => {
         if (!mounted) return;

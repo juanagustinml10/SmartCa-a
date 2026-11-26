@@ -31,9 +31,19 @@ export interface FieldWithRelations extends Field {
 }
 
 export interface IFieldsRepository {
-  findAll(query: QueryFieldDto): Promise<PaginatedResult<Field>>;
-  findById(id: string): Promise<FieldWithRelations | null>;
-  create(dto: CreateFieldDto): Promise<Field>;
-  update(id: string, dto: UpdateFieldDto): Promise<Field>;
-  softDelete(id: string): Promise<Field>;
+  findAll(
+    companyId: string,
+    query: QueryFieldDto,
+  ): Promise<PaginatedResult<Field>>;
+  findById(
+    companyId: string,
+    id: string,
+  ): Promise<FieldWithRelations | null>;
+  create(companyId: string, dto: CreateFieldDto): Promise<Field>;
+  update(
+    companyId: string,
+    id: string,
+    dto: UpdateFieldDto,
+  ): Promise<Field>;
+  softDelete(companyId: string, id: string): Promise<Field>;
 }

@@ -4,6 +4,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { LoggerService } from '../logger/logger.service.js';
+import { requireEnv } from '../common/config/required-env.js';
 import type { JwtPayload } from '@smartcana/types';
 
 @Injectable()
@@ -55,8 +56,7 @@ export class AuthService {
       this.jwtService.signAsync(
         { sub: user.id, tokenId: crypto.randomUUID() },
         {
-          secret:
-            process.env.JWT_REFRESH_SECRET ?? 'super-refresh-secret-change-me',
+          secret: requireEnv('JWT_REFRESH_SECRET'),
           expiresIn: refreshTokenExpiry,
         },
       ),
@@ -112,8 +112,7 @@ export class AuthService {
     let payload: { sub: string };
     try {
       payload = await this.jwtService.verifyAsync(refreshToken, {
-        secret:
-          process.env.JWT_REFRESH_SECRET ?? 'super-refresh-secret-change-me',
+        secret: requireEnv('JWT_REFRESH_SECRET'),
       });
     } catch {
       throw new UnauthorizedException('Refresh token inválido o expirado');
@@ -152,8 +151,7 @@ export class AuthService {
       this.jwtService.signAsync(
         { sub: user.id, tokenId: crypto.randomUUID() },
         {
-          secret:
-            process.env.JWT_REFRESH_SECRET ?? 'super-refresh-secret-change-me',
+          secret: requireEnv('JWT_REFRESH_SECRET'),
           expiresIn: '7d',
         },
       ),
@@ -203,8 +201,9 @@ export class AuthService {
         data: { refreshTokenHash: null },
       });
 
+      // Cerrar todas las sesiones del usuario, no sólo las de una IP.
       await this.prisma.session.updateMany({
-        where: { userId, isActive: true, ipAddress },
+        where: { userId, isActive: true },
         data: { isActive: false, expiredAt: new Date() },
       });
 
@@ -236,6 +235,7 @@ export class AuthService {
         language: true,
         timezone: true,
         status: true,
+        createdAt: true,
         lastAccessAt: true,
         role: { select: { code: true, name: true } },
         company: {

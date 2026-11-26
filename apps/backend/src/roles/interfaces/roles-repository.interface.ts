@@ -23,9 +23,16 @@ export interface IRolesRepository {
     companyId: string,
     query: QueryRoleDto,
   ): Promise<PaginatedResult<RoleWithPermissions>>;
-  findById(id: string): Promise<RoleWithPermissions | null>;
+  findById(
+    companyId: string,
+    id: string,
+  ): Promise<RoleWithPermissions | null>;
   findByCode(companyId: string, code: string): Promise<Role | null>;
   create(companyId: string, dto: CreateRoleDto): Promise<RoleWithPermissions>;
-  update(id: string, dto: UpdateRoleDto): Promise<RoleWithPermissions>;
-  delete(id: string): Promise<void>;
+  update(
+    companyId: string,
+    id: string,
+    dto: UpdateRoleDto,
+  ): Promise<RoleWithPermissions>;
+  delete(companyId: string, id: string): Promise<void>;
 }

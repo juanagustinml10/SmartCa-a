@@ -8,12 +8,12 @@ import type { Company } from '../generated/prisma/client.js';
 export class CompanyService {
   constructor(private readonly repository: CompanyRepository) {}
 
-  async findAll(): Promise<Company[]> {
-    return this.repository.findAll();
+  async findAll(companyId: string): Promise<Company[]> {
+    return this.repository.findAll(companyId);
   }
 
-  async findById(id: string): Promise<Company> {
-    const company = await this.repository.findById(id);
+  async findById(companyId: string, id: string): Promise<Company> {
+    const company = await this.repository.findById(companyId, id);
     if (!company)
       throw new NotFoundException(`Empresa con ID "${id}" no encontrada`);
     return company;
@@ -23,13 +23,17 @@ export class CompanyService {
     return this.repository.create(dto);
   }
 
-  async update(id: string, dto: UpdateCompanyDto): Promise<Company> {
-    await this.findById(id);
-    return this.repository.update(id, dto);
+  async update(
+    companyId: string,
+    id: string,
+    dto: UpdateCompanyDto,
+  ): Promise<Company> {
+    await this.findById(companyId, id);
+    return this.repository.update(companyId, id, dto);
   }
 
-  async remove(id: string): Promise<void> {
-    await this.findById(id);
-    await this.repository.softDelete(id);
+  async remove(companyId: string, id: string): Promise<void> {
+    await this.findById(companyId, id);
+    await this.repository.softDelete(companyId, id);
   }
 }

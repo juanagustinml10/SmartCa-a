@@ -9,11 +9,15 @@ import type { Company } from '../generated/prisma/client.js';
 export class CompanyRepository implements ICompanyRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(): Promise<Company[]> {
-    return this.prisma.company.findMany({ where: { deletedAt: null } });
+  async findAll(companyId: string): Promise<Company[]> {
+    return this.prisma.company.findMany({
+      where: { id: companyId, deletedAt: null },
+    });
   }
 
-  async findById(id: string): Promise<Company | null> {
+  async findById(companyId: string, id: string): Promise<Company | null> {
+    // La empresa no tiene un `companyId` propio: su propio ID es el límite.
+    if (id !== companyId) return null;
     return this.prisma.company.findFirst({ where: { id, deletedAt: null } });
   }
 
@@ -21,11 +25,21 @@ export class CompanyRepository implements ICompanyRepository {
     return this.prisma.company.create({ data: dto });
   }
 
-  async update(id: string, dto: UpdateCompanyDto): Promise<Company> {
+  async update(
+    companyId: string,
+    id: string,
+    dto: UpdateCompanyDto,
+  ): Promise<Company> {
+    if (id !== companyId) {
+      throw new Error('Empresa fuera del alcance del usuario autenticado');
+    }
     return this.prisma.company.update({ where: { id }, data: dto });
   }
 
-  async softDelete(id: string): Promise<Company> {
+  async softDelete(companyId: string, id: string): Promise<Company> {
+    if (id !== companyId) {
+      throw new Error('Empresa fuera del alcance del usuario autenticado');
+    }
     return this.prisma.company.update({
       where: { id },
       data: { deletedAt: new Date() },

@@ -53,7 +53,15 @@ export default function ProfilePage() {
                 <ProfileField icon={Mail} label="Email" value={user.email} />
                 <ProfileField icon={Building2} label="Empresa" value={user.companyName} />
                 <ProfileField icon={Globe} label="Zona horaria" value={user.timezone.replace('America/Argentina/', '')} />
-                <ProfileField icon={Shield} label="Rol" value={{ owner: 'Propietario', admin: 'Administrador', manager: 'Gerente', operator: 'Operador' }[user.role] ?? user.role} />
+                <ProfileField icon={Shield} label="Rol" value={{
+                  super_admin: 'Super administrador',
+                  admin: 'Administrador',
+                  gerente: 'Gerente',
+                  supervisor: 'Supervisor',
+                  ingeniero: 'Ingeniero agrónomo',
+                  operador: 'Operador',
+                  invitado: 'Invitado',
+                }[user.role] ?? user.role} />
                 <ProfileField icon={Calendar} label="Miembro desde" value={formatDate(user.createdAt)} />
                 <ProfileField icon={Clock} label="Último acceso" value={`${formatDate(user.lastAccess)} · ${formatTime(user.lastAccess)}`} />
               </div>

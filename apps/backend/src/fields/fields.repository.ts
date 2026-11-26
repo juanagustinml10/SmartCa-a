@@ -14,12 +14,18 @@ import type { Field, Prisma } from '../generated/prisma/client.js';
 export class FieldsRepository implements IFieldsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: QueryFieldDto): Promise<PaginatedResult<Field>> {
+  async findAll(
+    companyId: string,
+    query: QueryFieldDto,
+  ): Promise<PaginatedResult<Field>> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.FieldWhereInput = { deletedAt: null };
+    const where: Prisma.FieldWhereInput = {
+      deletedAt: null,
+      farm: { companyId, deletedAt: null },
+    };
 
     if (query.search) {
       where.OR = [
@@ -82,9 +88,16 @@ export class FieldsRepository implements IFieldsRepository {
     };
   }
 
-  async findById(id: string): Promise<FieldWithRelations | null> {
+  async findById(
+    companyId: string,
+    id: string,
+  ): Promise<FieldWithRelations | null> {
     const result = await this.prisma.field.findFirst({
-      where: { id, deletedAt: null },
+      where: {
+        id,
+        deletedAt: null,
+        farm: { companyId, deletedAt: null },
+      },
       include: {
         fieldStatus: { select: { code: true, name: true } },
         variety: { select: { code: true, name: true } },
@@ -113,7 +126,10 @@ export class FieldsRepository implements IFieldsRepository {
     return result;
   }
 
-  async create(dto: CreateFieldDto): Promise<Field> {
+  async create(companyId: string, dto: CreateFieldDto): Promise<Field> {
+    // `companyId` se valida en el servicio contra el establecimiento; aquí se
+    // declara explícitamente para que la consulta no dependa del body.
+    void companyId;
     return this.prisma.field.create({
       data: {
         farmId: dto.farmId,
@@ -140,7 +156,11 @@ export class FieldsRepository implements IFieldsRepository {
     });
   }
 
-  async update(id: string, dto: UpdateFieldDto): Promise<Field> {
+  async update(
+    companyId: string,
+    id: string,
+    dto: UpdateFieldDto,
+  ): Promise<Field> {
     const data: Record<string, unknown> = {};
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.description !== undefined) data.description = dto.description;
@@ -161,7 +181,7 @@ export class FieldsRepository implements IFieldsRepository {
     if (dto.campaignCode !== undefined) data.campaignCode = dto.campaignCode;
 
     return this.prisma.field.update({
-      where: { id },
+      where: { id, farm: { companyId } },
       data,
       include: {
         fieldStatus: { select: { code: true, name: true } },
@@ -170,9 +190,9 @@ export class FieldsRepository implements IFieldsRepository {
     });
   }
 
-  async softDelete(id: string): Promise<Field> {
+  async softDelete(companyId: string, id: string): Promise<Field> {
     return this.prisma.field.update({
-      where: { id },
+      where: { id, farm: { companyId } },
       data: { deletedAt: new Date() },
     });
   }

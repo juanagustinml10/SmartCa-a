@@ -2,6 +2,7 @@ import {
   IsString,
   IsOptional,
   IsNumber,
+  IsBoolean,
   Min,
   MinLength,
 } from 'class-validator';
@@ -33,5 +34,6 @@ export class CreateCostCategoryDto {
   sortOrder?: number;
 
   @IsOptional()
+  @IsBoolean()
   isActive?: boolean;
 }

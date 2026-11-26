@@ -7,10 +7,9 @@ import { notFound } from "next/navigation";
 import { FieldDetailHeader } from "@/components/campos/field-detail-header";
 import { FieldProductionChart } from "@/components/campos/field-production-chart";
 import { fetchFieldById } from "@/lib/api-fields";
-import { MOCK_FIELDS } from "@/lib/mock-fields";
-import { MOCK_HARVESTS, computeFieldShi } from "@/lib/mock-harvests";
 import { ShiGauge } from "@/components/harvests/shi-gauge";
 import type { FieldData } from "@/types/fields";
+import type { ShiBreakdown, ShiLevel, ShiResult } from "@/types/shi";
 
 const typeIconMap: Record<string, React.ElementType> = {
   harvest: Combine,
@@ -44,6 +43,65 @@ const priorityConfig: Record<string, { dot: string; bg: string; label: string }>
   low: { dot: "bg-info-500", bg: "bg-info-50 dark:bg-info-950/20", label: "Baja" },
 };
 
+function clampScore(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function levelFor(score: number): ShiLevel {
+  if (score >= 80) return "excelente";
+  if (score >= 60) return "bueno";
+  if (score >= 40) return "regular";
+  return "critico";
+}
+
+/**
+ * Arma el resultado visible con datos reales del campo. Si el backend ya
+ * calculó `shiScore`, ese valor manda; si no, se deriva de forma determinista
+ * (sin Math.random) de alertas, actividades, costos e historial recibidos.
+ * Pendiente de exponer el cálculo canónico de `ShiService` por HTTP.
+ */
+function shiFromField(field: FieldData): ShiResult {
+  const totalCosts = field.costs.reduce((sum, cost) => sum + cost.value, 0);
+  const avgYield = field.historicalProduction.length > 0
+    ? field.historicalProduction.reduce((sum, h) => sum + h.yield_, 0) / field.historicalProduction.length
+    : 0;
+
+  const breakdown: ShiBreakdown = {
+    healthScore: clampScore(field.healthScore),
+    fieldStatus: clampScore(
+      field.status === "active" ? 100 : field.status === "harvesting" ? 85 : field.status === "resting" ? 60 : 40,
+    ),
+    alerts: clampScore(100 - field.alerts.length * 20),
+    activities: clampScore(field.activities.length === 0 ? 50 : field.activities.length * 20),
+    production: clampScore(avgYield),
+    costs: clampScore(totalCosts === 0 ? 80 : 100 - totalCosts / 5000),
+    sanitary: clampScore(field.healthScore),
+  };
+
+  const weights: Record<keyof ShiBreakdown, number> = {
+    healthScore: 0.25,
+    fieldStatus: 0.15,
+    alerts: 0.15,
+    activities: 0.15,
+    production: 0.1,
+    costs: 0.1,
+    sanitary: 0.1,
+  };
+  const weighted = (Object.keys(weights) as (keyof ShiBreakdown)[]).reduce(
+    (sum, key) => sum + breakdown[key] * weights[key],
+    0,
+  );
+
+  const score = field.shiScore != null ? clampScore(field.shiScore) : clampScore(weighted);
+  const level = (field.shiLevel as ShiLevel | null) ?? levelFor(score);
+  return {
+    score,
+    level,
+    breakdown,
+    calculatedAt: field.shiCalculatedAt ? new Date(field.shiCalculatedAt) : new Date(),
+  };
+}
+
 export default function FieldDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [field, setField] = useState<FieldData | null>(null);
@@ -59,20 +117,12 @@ export default function FieldDetailPage({ params }: { params: Promise<{ id: stri
         if (f) {
           setField(f);
         } else {
-          // Try mock as fallback
-          const mock = MOCK_FIELDS.find((mf) => mf.id === id);
-          if (mock) setField(mock);
+          setError("Campo no encontrado");
         }
       })
       .catch((err) => {
         if (!mounted) return;
-        // Fallback to mock
-        const mock = MOCK_FIELDS.find((mf) => mf.id === id);
-        if (mock) {
-          setField(mock);
-        } else {
-          setError(err instanceof Error ? err.message : "Error al cargar el campo");
-        }
+        setError(err instanceof Error ? err.message : "Error al cargar el campo");
       })
       .finally(() => {
         if (mounted) setLoading(false);
@@ -105,8 +155,10 @@ export default function FieldDetailPage({ params }: { params: Promise<{ id: stri
   }
 
   const totalCosts = field.costs.reduce((acc, c) => acc + c.value, 0);
-  const fieldShi = computeFieldShi(field.id, MOCK_HARVESTS);
-  const fieldHarvests = MOCK_HARVESTS.filter(h => h.fieldId === field.id).sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
+  const fieldShi = shiFromField(field);
+  const fieldHarvests = [...(field.harvests ?? [])].sort(
+    (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime(),
+  );
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:px-6">

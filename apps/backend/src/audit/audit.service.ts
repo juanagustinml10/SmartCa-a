@@ -18,7 +18,7 @@ interface AuditEntry {
 }
 
 interface AuditFilters {
-  companyId?: string;
+  companyId: string;
   action?: string;
   entity?: string;
   dateFrom?: Date;
@@ -56,9 +56,9 @@ export class AuditService {
     }
   }
 
-  async findByEntity(entity: string, entityId: string) {
+  async findByEntity(companyId: string, entity: string, entityId: string) {
     return this.prisma.auditLog.findMany({
-      where: { entity, entityId },
+      where: { companyId, entity, entityId },
       orderBy: { createdAt: 'desc' },
       take: 50,
     });

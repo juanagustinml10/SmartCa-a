@@ -56,18 +56,25 @@ export class UsersRepository implements IUsersRepository {
     };
   }
 
-  async findById(id: string): Promise<User | null> {
-    return this.prisma.user.findFirst({ where: { id, deletedAt: null } });
+  async findById(companyId: string, id: string): Promise<User | null> {
+    return this.prisma.user.findFirst({
+      where: { id, companyId, deletedAt: null },
+    });
   }
 
   async findByEmail(email: string): Promise<User | null> {
     return this.prisma.user.findUnique({ where: { email } });
   }
 
-  async create(dto: CreateUserDto, passwordHash: string): Promise<User> {
+  async create(
+    companyId: string,
+    dto: CreateUserDto,
+    passwordHash: string,
+  ): Promise<User> {
+    // La empresa nunca se toma del DTO: sólo de la identidad autenticada.
     return this.prisma.user.create({
       data: {
-        companyId: dto.companyId,
+        companyId,
         roleId: dto.roleId,
         firstName: dto.firstName,
         lastName: dto.lastName,
@@ -84,6 +91,7 @@ export class UsersRepository implements IUsersRepository {
   }
 
   async update(
+    companyId: string,
     id: string,
     dto: UpdateUserDto,
     passwordHash?: string,
@@ -101,12 +109,15 @@ export class UsersRepository implements IUsersRepository {
     if (dto.status !== undefined) data.status = dto.status;
     if (passwordHash !== undefined) data.passwordHash = passwordHash;
 
-    return this.prisma.user.update({ where: { id }, data });
+    return this.prisma.user.update({
+      where: { id, companyId },
+      data,
+    });
   }
 
-  async softDelete(id: string): Promise<User> {
+  async softDelete(companyId: string, id: string): Promise<User> {
     return this.prisma.user.update({
-      where: { id },
+      where: { id, companyId },
       data: { deletedAt: new Date() },
     });
   }

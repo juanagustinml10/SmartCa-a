@@ -70,7 +70,13 @@ export class ReportsRepository implements IReportsRepository {
       deletedAt: null,
       field: { deletedAt: null, farm: { companyId: filters.companyId, deletedAt: null } },
     };
-    if (filters.farmId) where.field = { farmId: filters.farmId };
+    if (filters.farmId) {
+      where.field = {
+        farmId: filters.farmId,
+        deletedAt: null,
+        farm: { companyId: filters.companyId, deletedAt: null },
+      };
+    }
     if (filters.fieldId) where.fieldId = filters.fieldId;
     if (filters.campaignId) where.campaignId = filters.campaignId;
     if (filters.startDate || filters.endDate) {
@@ -652,7 +658,17 @@ export class ReportsRepository implements IReportsRepository {
       }),
     ]);
 
-    const activeCampaign = await this.prisma.campaign.findFirst({ where: { isActive: true } });
+    // Las campañas son globales: sólo se puede devolver una vinculada a datos
+    // de la empresa autenticada.
+    const activeCampaign = await this.prisma.campaign.findFirst({
+      where: {
+        isActive: true,
+        OR: [
+          { harvests: { some: { companyId: filters.companyId, deletedAt: null } } },
+          { costs: { some: { companyId: filters.companyId, deletedAt: null } } },
+        ],
+      },
+    });
     const critical = alerts.filter((a) => a.priority.toLowerCase() === 'critical').length;
     const high = alerts.filter((a) => a.priority.toLowerCase() === 'high').length;
 

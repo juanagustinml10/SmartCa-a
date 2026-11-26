@@ -1,7 +1,8 @@
 import { Controller, Get, Put, Delete, Body, Param } from '@nestjs/common';
 import { SettingsService } from './settings.service.js';
-import type { UpdateSettingDto } from './dto/update-setting.dto.js';
+import { UpdateSettingDto } from './dto/update-setting.dto.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
+import { Permissions } from '../common/decorators/permissions.decorator.js';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import type { JwtPayload } from '@smartcana/types';
 
@@ -11,6 +12,7 @@ export class SettingsController {
 
   @Get()
   @Roles('admin', 'ingeniero')
+  @Permissions('settings.view')
   async findAll(@CurrentUser() user: JwtPayload) {
     const data = await this.service.findAll(user.companyId);
     return { data };
@@ -18,6 +20,7 @@ export class SettingsController {
 
   @Get(':key')
   @Roles('admin', 'ingeniero', 'supervisor')
+  @Permissions('settings.view')
   async get(@Param('key') key: string, @CurrentUser() user: JwtPayload) {
     const value = await this.service.get(user.companyId, key);
     return { data: { key, value } };
@@ -25,6 +28,7 @@ export class SettingsController {
 
   @Put(':key')
   @Roles('admin')
+  @Permissions('settings.manage')
   async set(
     @Param('key') key: string,
     @Body() dto: UpdateSettingDto,
@@ -39,6 +43,7 @@ export class SettingsController {
 
   @Delete(':key')
   @Roles('admin')
+  @Permissions('settings.manage')
   async remove(@Param('key') key: string, @CurrentUser() user: JwtPayload) {
     await this.service.remove(user.companyId, key);
     return { data: null };

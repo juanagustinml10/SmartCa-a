@@ -63,9 +63,12 @@ export class RolesRepository implements IRolesRepository {
     };
   }
 
-  async findById(id: string): Promise<RoleWithPermissions | null> {
+  async findById(
+    companyId: string,
+    id: string,
+  ): Promise<RoleWithPermissions | null> {
     return this.prisma.role.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, companyId, deletedAt: null },
       include: this.includeRolePermissions,
     });
   }
@@ -96,7 +99,11 @@ export class RolesRepository implements IRolesRepository {
     });
   }
 
-  async update(id: string, dto: UpdateRoleDto): Promise<RoleWithPermissions> {
+  async update(
+    companyId: string,
+    id: string,
+    dto: UpdateRoleDto,
+  ): Promise<RoleWithPermissions> {
     const updateData: Record<string, unknown> = {};
     if (dto.code !== undefined) updateData.code = dto.code;
     if (dto.name !== undefined) updateData.name = dto.name;
@@ -104,11 +111,11 @@ export class RolesRepository implements IRolesRepository {
 
     if (dto.permissionIds !== undefined) {
       await this.prisma.rolePermission.deleteMany({
-        where: { roleId: id },
+        where: { roleId: id, role: { companyId } },
       });
 
       return this.prisma.role.update({
-        where: { id },
+        where: { id, companyId },
         data: {
           ...updateData,
           rolePermissions: {
@@ -122,15 +129,15 @@ export class RolesRepository implements IRolesRepository {
     }
 
     return this.prisma.role.update({
-      where: { id },
+      where: { id, companyId },
       data: updateData,
       include: this.includeRolePermissions,
     });
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(companyId: string, id: string): Promise<void> {
     await this.prisma.role.update({
-      where: { id },
+      where: { id, companyId },
       data: { deletedAt: new Date() },
     });
   }

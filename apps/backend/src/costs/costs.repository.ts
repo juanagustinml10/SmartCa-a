@@ -15,12 +15,16 @@ import type { Cost, Prisma } from '../generated/prisma/client.js';
 export class CostsRepository implements ICostsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: QueryCostDto): Promise<PaginatedResult<Cost>> {
+  async findAll(
+    companyId: string,
+    query: QueryCostDto,
+  ): Promise<PaginatedResult<Cost>> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.CostWhereInput = { deletedAt: null };
+    // `query.companyId` se ignora: el único ámbito válido es el del JWT.
+    const where: Prisma.CostWhereInput = { companyId, deletedAt: null };
 
     if (query.search) {
       where.OR = [
@@ -29,7 +33,6 @@ export class CostsRepository implements ICostsRepository {
       ];
     }
 
-    if (query.companyId) where.companyId = query.companyId;
     if (query.farmId) where.farmId = query.farmId;
     if (query.fieldId) where.fieldId = query.fieldId;
     if (query.costCategoryId) where.costCategoryId = query.costCategoryId;
@@ -94,9 +97,12 @@ export class CostsRepository implements ICostsRepository {
     };
   }
 
-  async findById(id: string): Promise<CostWithRelations | null> {
+  async findById(
+    companyId: string,
+    id: string,
+  ): Promise<CostWithRelations | null> {
     return this.prisma.cost.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, companyId, deletedAt: null },
       include: {
         costCategory: true,
         supplier: true,
@@ -109,10 +115,10 @@ export class CostsRepository implements ICostsRepository {
     });
   }
 
-  async create(dto: CreateCostDto): Promise<Cost> {
+  async create(companyId: string, dto: CreateCostDto): Promise<Cost> {
     return this.prisma.cost.create({
       data: {
-        companyId: dto.companyId,
+        companyId,
         farmId: dto.farmId,
         fieldId: dto.fieldId,
         costCategoryId: dto.costCategoryId,
@@ -134,9 +140,13 @@ export class CostsRepository implements ICostsRepository {
     });
   }
 
-  async update(id: string, dto: UpdateCostDto): Promise<Cost> {
+  async update(
+    companyId: string,
+    id: string,
+    dto: UpdateCostDto,
+  ): Promise<Cost> {
     const data: Record<string, unknown> = {};
-    if (dto.companyId !== undefined) data.companyId = dto.companyId;
+    // `dto.companyId` se descarta: los costos no se mueven entre empresas.
     if (dto.farmId !== undefined) data.farmId = dto.farmId;
     if (dto.fieldId !== undefined) data.fieldId = dto.fieldId;
     if (dto.costCategoryId !== undefined)
@@ -156,26 +166,27 @@ export class CostsRepository implements ICostsRepository {
     if (dto.receiptUrl !== undefined) data.receiptUrl = dto.receiptUrl;
     if (dto.observations !== undefined) data.observations = dto.observations;
 
-    return this.prisma.cost.update({ where: { id }, data });
+    return this.prisma.cost.update({ where: { id, companyId }, data });
   }
 
-  async softDelete(id: string): Promise<Cost> {
+  async softDelete(companyId: string, id: string): Promise<Cost> {
     return this.prisma.cost.update({
-      where: { id },
+      where: { id, companyId },
       data: { deletedAt: new Date() },
     });
   }
 
-  async getAnalytics(filters: {
-    companyId?: string;
-    farmId?: string;
-    fieldId?: string;
-    campaignId?: string;
-    startDate?: string;
-    endDate?: string;
-  }): Promise<CostAnalytics> {
-    const where: Prisma.CostWhereInput = { deletedAt: null };
-    if (filters.companyId) where.companyId = filters.companyId;
+  async getAnalytics(
+    companyId: string,
+    filters: {
+      farmId?: string;
+      fieldId?: string;
+      campaignId?: string;
+      startDate?: string;
+      endDate?: string;
+    },
+  ): Promise<CostAnalytics> {
+    const where: Prisma.CostWhereInput = { companyId, deletedAt: null };
     if (filters.farmId) where.farmId = filters.farmId;
     if (filters.fieldId) where.fieldId = filters.fieldId;
     if (filters.campaignId) where.campaignId = filters.campaignId;

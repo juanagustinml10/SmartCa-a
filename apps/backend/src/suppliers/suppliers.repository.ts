@@ -13,12 +13,16 @@ import type { Supplier, Prisma } from '../generated/prisma/client.js';
 export class SuppliersRepository implements ISuppliersRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: QuerySupplierDto): Promise<PaginatedResult<Supplier>> {
+  async findAll(
+    companyId: string,
+    query: QuerySupplierDto,
+  ): Promise<PaginatedResult<Supplier>> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.SupplierWhereInput = { deletedAt: null };
+    // `query.companyId` se ignora: el único ámbito válido es el del JWT.
+    const where: Prisma.SupplierWhereInput = { companyId, deletedAt: null };
     if (query.search) {
       where.OR = [
         { name: { contains: query.search, mode: 'insensitive' } },
@@ -26,7 +30,6 @@ export class SuppliersRepository implements ISuppliersRepository {
         { cuit: { contains: query.search } },
       ];
     }
-    if (query.companyId) where.companyId = query.companyId;
     if (query.status) where.status = query.status;
 
     const orderBy: Prisma.SupplierOrderByWithRelationInput = {};
@@ -55,14 +58,16 @@ export class SuppliersRepository implements ISuppliersRepository {
     };
   }
 
-  async findById(id: string): Promise<Supplier | null> {
-    return this.prisma.supplier.findFirst({ where: { id, deletedAt: null } });
+  async findById(companyId: string, id: string): Promise<Supplier | null> {
+    return this.prisma.supplier.findFirst({
+      where: { id, companyId, deletedAt: null },
+    });
   }
 
-  async create(dto: CreateSupplierDto): Promise<Supplier> {
+  async create(companyId: string, dto: CreateSupplierDto): Promise<Supplier> {
     return this.prisma.supplier.create({
       data: {
-        companyId: dto.companyId,
+        companyId,
         name: dto.name,
         cuit: dto.cuit,
         contactName: dto.contactName,
@@ -75,7 +80,11 @@ export class SuppliersRepository implements ISuppliersRepository {
     });
   }
 
-  async update(id: string, dto: UpdateSupplierDto): Promise<Supplier> {
+  async update(
+    companyId: string,
+    id: string,
+    dto: UpdateSupplierDto,
+  ): Promise<Supplier> {
     const data: Record<string, unknown> = {};
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.cuit !== undefined) data.cuit = dto.cuit;
@@ -85,12 +94,12 @@ export class SuppliersRepository implements ISuppliersRepository {
     if (dto.address !== undefined) data.address = dto.address;
     if (dto.notes !== undefined) data.notes = dto.notes;
     if (dto.status !== undefined) data.status = dto.status;
-    return this.prisma.supplier.update({ where: { id }, data });
+    return this.prisma.supplier.update({ where: { id, companyId }, data });
   }
 
-  async softDelete(id: string): Promise<Supplier> {
+  async softDelete(companyId: string, id: string): Promise<Supplier> {
     return this.prisma.supplier.update({
-      where: { id },
+      where: { id, companyId },
       data: { deletedAt: new Date() },
     });
   }

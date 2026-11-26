@@ -21,30 +21,38 @@ export class FieldsService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async findAll(query: QueryFieldDto): Promise<PaginatedResult<Field>> {
-    return this.repository.findAll(query);
+  async findAll(
+    companyId: string,
+    query: QueryFieldDto,
+  ): Promise<PaginatedResult<Field>> {
+    return this.repository.findAll(companyId, query);
   }
 
-  async findById(id: string): Promise<FieldWithRelations> {
-    const field = await this.repository.findById(id);
+  async findById(companyId: string, id: string): Promise<FieldWithRelations> {
+    const field = await this.repository.findById(companyId, id);
     if (!field) {
       throw new NotFoundException(`Campo con ID "${id}" no encontrado`);
     }
     return field;
   }
 
-  async create(dto: CreateFieldDto): Promise<Field> {
+  async create(companyId: string, dto: CreateFieldDto): Promise<Field> {
     const existing = await this.prisma.field.findFirst({
-      where: { name: dto.name, deletedAt: null },
+      where: {
+        name: dto.name,
+        deletedAt: null,
+        farm: { companyId, deletedAt: null },
+      },
     });
     if (existing) {
       throw new ConflictException(
-        `Ya existe un campo con el nombre "${dto.name}"`,
+        `Ya existe un campo con el nombre "${dto.name}" en esta empresa`,
       );
     }
 
+    // El establecimiento tiene que pertenecer a la empresa del token.
     const farm = await this.prisma.farm.findFirst({
-      where: { id: dto.farmId, deletedAt: null },
+      where: { id: dto.farmId, companyId, deletedAt: null },
     });
     if (!farm)
       throw new NotFoundException(
@@ -69,21 +77,30 @@ export class FieldsService {
         `Estado con ID "${dto.fieldStatusId}" no encontrado`,
       );
 
-    return this.repository.create(dto);
+    return this.repository.create(companyId, dto);
   }
 
-  async update(id: string, dto: UpdateFieldDto): Promise<Field> {
-    const field = await this.repository.findById(id);
+  async update(
+    companyId: string,
+    id: string,
+    dto: UpdateFieldDto,
+  ): Promise<Field> {
+    const field = await this.repository.findById(companyId, id);
     if (!field)
       throw new NotFoundException(`Campo con ID "${id}" no encontrado`);
 
     if (dto.name && dto.name !== field.name) {
       const existing = await this.prisma.field.findFirst({
-        where: { name: dto.name, deletedAt: null, id: { not: id } },
+        where: {
+          name: dto.name,
+          deletedAt: null,
+          id: { not: id },
+          farm: { companyId, deletedAt: null },
+        },
       });
       if (existing) {
         throw new ConflictException(
-          `Ya existe un campo con el nombre "${dto.name}"`,
+          `Ya existe un campo con el nombre "${dto.name}" en esta empresa`,
         );
       }
     }
@@ -108,13 +125,13 @@ export class FieldsService {
         );
     }
 
-    return this.repository.update(id, dto);
+    return this.repository.update(companyId, id, dto);
   }
 
-  async remove(id: string): Promise<void> {
-    const field = await this.repository.findById(id);
+  async remove(companyId: string, id: string): Promise<void> {
+    const field = await this.repository.findById(companyId, id);
     if (!field)
       throw new NotFoundException(`Campo con ID "${id}" no encontrado`);
-    await this.repository.softDelete(id);
+    await this.repository.softDelete(companyId, id);
   }
 }

@@ -14,6 +14,7 @@ import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { QueryUserDto } from './dto/query-user.dto.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
+import { Permissions } from '../common/decorators/permissions.decorator.js';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import type { JwtPayload } from '@smartcana/types';
 
@@ -23,6 +24,7 @@ export class UsersController {
 
   @Get()
   @Roles('admin', 'ingeniero')
+  @Permissions('users.view')
   async findAll(@Query() query: QueryUserDto, @CurrentUser() user: JwtPayload) {
     const result = await this.service.findAll(user.companyId, query);
     return { data: result.data, meta: result.meta };
@@ -30,32 +32,43 @@ export class UsersController {
 
   @Get(':id')
   @Roles('admin', 'ingeniero')
-  async findById(@Param('id', ParseUUIDPipe) id: string) {
-    const data = await this.service.findById(id);
+  @Permissions('users.view')
+  async findById(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const data = await this.service.findById(user.companyId, id);
     return { data };
   }
 
   @Post()
   @Roles('admin')
-  async create(@Body() dto: CreateUserDto) {
-    const data = await this.service.create(dto);
+  @Permissions('users.create')
+  async create(@Body() dto: CreateUserDto, @CurrentUser() user: JwtPayload) {
+    const data = await this.service.create(user.companyId, user.role, dto);
     return { data };
   }
 
   @Patch(':id')
   @Roles('admin')
+  @Permissions('users.edit')
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateUserDto,
+    @CurrentUser() user: JwtPayload,
   ) {
-    const data = await this.service.update(id, dto);
+    const data = await this.service.update(user.companyId, user.role, id, dto);
     return { data };
   }
 
   @Delete(':id')
   @Roles('admin')
-  async remove(@Param('id', ParseUUIDPipe) id: string) {
-    await this.service.remove(id);
+  @Permissions('users.delete')
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.service.remove(user.companyId, id);
     return { data: null };
   }
 }

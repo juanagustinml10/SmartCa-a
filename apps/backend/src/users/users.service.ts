@@ -1,10 +1,14 @@
 import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
-  ConflictException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { UsersRepository } from './users.repository.js';
+import { PrismaService } from '../prisma/prisma.service.js';
+import { canAssignRole } from '../common/constants/roles.js';
 import type { CreateUserDto } from './dto/create-user.dto.js';
 import type { UpdateUserDto } from './dto/update-user.dto.js';
 import type { QueryUserDto } from './dto/query-user.dto.js';
@@ -13,7 +17,10 @@ import type { PaginatedResult } from '../fields/interfaces/fields-repository.int
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly repository: UsersRepository) {}
+  constructor(
+    private readonly repository: UsersRepository,
+    private readonly prisma: PrismaService,
+  ) {}
 
   async findAll(
     companyId: string,
@@ -22,24 +29,47 @@ export class UsersService {
     return this.repository.findAll(companyId, query);
   }
 
-  async findById(id: string): Promise<User> {
-    const user = await this.repository.findById(id);
+  async findById(companyId: string, id: string): Promise<User> {
+    const user = await this.repository.findById(companyId, id);
     if (!user)
       throw new NotFoundException(`Usuario con ID "${id}" no encontrado`);
     return user;
   }
 
-  async create(dto: CreateUserDto): Promise<User> {
+  /** Impide que un actor asigne un rol de nivel superior al suyo. */
+  private async assertRoleAssignable(roleId: string, actorRole: string) {
+    const role = await this.prisma.role.findUnique({ where: { id: roleId } });
+    if (!role || role.deletedAt)
+      throw new BadRequestException(`Rol con ID "${roleId}" no encontrado`);
+    if (!canAssignRole(actorRole, role.code)) {
+      throw new ForbiddenException('No podés asignar un rol superior al tuyo');
+    }
+  }
+
+  async create(
+    companyId: string,
+    actorRole: string,
+    dto: CreateUserDto,
+  ): Promise<User> {
     const existing = await this.repository.findByEmail(dto.email);
     if (existing)
       throw new ConflictException(`El email "${dto.email}" ya está registrado`);
 
+    await this.assertRoleAssignable(dto.roleId, actorRole);
+
     const passwordHash = await bcrypt.hash(dto.password, 10);
-    return this.repository.create(dto, passwordHash);
+    return this.repository.create(companyId, dto, passwordHash);
   }
 
-  async update(id: string, dto: UpdateUserDto): Promise<User> {
-    await this.findById(id);
+  async update(
+    companyId: string,
+    actorRole: string,
+    id: string,
+    dto: UpdateUserDto,
+  ): Promise<User> {
+    await this.findById(companyId, id);
+
+    if (dto.roleId) await this.assertRoleAssignable(dto.roleId, actorRole);
 
     if (dto.email) {
       const existing = await this.repository.findByEmail(dto.email);
@@ -55,11 +85,11 @@ export class UsersService {
       passwordHash = await bcrypt.hash(dto.password, 10);
     }
 
-    return this.repository.update(id, dto, passwordHash);
+    return this.repository.update(companyId, id, dto, passwordHash);
   }
 
-  async remove(id: string): Promise<void> {
-    await this.findById(id);
-    await this.repository.softDelete(id);
+  async remove(companyId: string, id: string): Promise<void> {
+    await this.findById(companyId, id);
+    await this.repository.softDelete(companyId, id);
   }
 }

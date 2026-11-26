@@ -16,9 +16,9 @@ export class FarmRepository implements IFarmRepository {
     });
   }
 
-  async findById(id: string): Promise<Farm | null> {
+  async findById(companyId: string, id: string): Promise<Farm | null> {
     return this.prisma.farm.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, companyId, deletedAt: null },
       include: { fields: { where: { deletedAt: null } } },
     });
   }
@@ -38,7 +38,11 @@ export class FarmRepository implements IFarmRepository {
     });
   }
 
-  async update(id: string, dto: UpdateFarmDto): Promise<Farm> {
+  async update(
+    companyId: string,
+    id: string,
+    dto: UpdateFarmDto,
+  ): Promise<Farm> {
     const data: Record<string, unknown> = {};
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.description !== undefined) data.description = dto.description;
@@ -48,12 +52,12 @@ export class FarmRepository implements IFarmRepository {
     if (dto.longitude !== undefined) data.longitude = dto.longitude;
     if (dto.status !== undefined) data.status = dto.status;
 
-    return this.prisma.farm.update({ where: { id }, data });
+    return this.prisma.farm.update({ where: { id, companyId }, data });
   }
 
-  async softDelete(id: string): Promise<Farm> {
+  async softDelete(companyId: string, id: string): Promise<Farm> {
     return this.prisma.farm.update({
-      where: { id },
+      where: { id, companyId },
       data: { deletedAt: new Date() },
     });
   }

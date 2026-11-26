@@ -18,72 +18,82 @@ export class HarvestsService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async findAll(query: QueryHarvestDto): Promise<PaginatedResult<Harvest>> {
-    return this.repository.findAll(query);
+  async findAll(
+    companyId: string,
+    query: QueryHarvestDto,
+  ): Promise<PaginatedResult<Harvest>> {
+    return this.repository.findAll(companyId, query);
   }
 
-  async findById(id: string): Promise<HarvestWithRelations> {
-    const harvest = await this.repository.findById(id);
+  async findById(
+    companyId: string,
+    id: string,
+  ): Promise<HarvestWithRelations> {
+    const harvest = await this.repository.findById(companyId, id);
     if (!harvest)
       throw new NotFoundException(`Cosecha con ID "${id}" no encontrada`);
     return harvest;
   }
 
-  async create(dto: CreateHarvestDto): Promise<Harvest> {
+  async create(companyId: string, dto: CreateHarvestDto): Promise<Harvest> {
     await this.validateReferences(
-      dto.companyId,
+      companyId,
       dto.farmId,
       dto.fieldId,
       dto.campaignId,
       dto.varietyId,
     );
-    return this.repository.create(dto);
+    // dto.companyId existe por compatibilidad del DTO, pero nunca se usa.
+    return this.repository.create(companyId, dto);
   }
 
-  async update(id: string, dto: UpdateHarvestDto): Promise<Harvest> {
-    const harvest = await this.repository.findById(id);
-    if (!harvest)
-      throw new NotFoundException(`Cosecha con ID "${id}" no encontrada`);
-    return this.repository.update(id, dto);
+  async update(
+    companyId: string,
+    id: string,
+    dto: UpdateHarvestDto,
+  ): Promise<Harvest> {
+    const harvest = await this.findById(companyId, id);
+    if (dto.farmId || dto.fieldId || dto.campaignId || dto.varietyId) {
+      await this.validateReferences(
+        companyId,
+        dto.farmId ?? harvest.farmId ?? undefined,
+        dto.fieldId ?? harvest.fieldId,
+        dto.campaignId ?? harvest.campaignId,
+        dto.varietyId ?? harvest.varietyId ?? undefined,
+      );
+    }
+    // dto.companyId se ignora: una cosecha no puede cambiar de empresa.
+    return this.repository.update(companyId, id, dto);
   }
 
-  async remove(id: string): Promise<void> {
-    const harvest = await this.repository.findById(id);
-    if (!harvest)
-      throw new NotFoundException(`Cosecha con ID "${id}" no encontrada`);
-    await this.repository.softDelete(id);
+  async remove(companyId: string, id: string): Promise<void> {
+    await this.findById(companyId, id);
+    await this.repository.softDelete(companyId, id);
   }
 
-  async getAnalytics(filters: {
-    companyId?: string;
-    farmId?: string;
-    fieldId?: string;
-    campaignId?: string;
-    startDate?: string;
-    endDate?: string;
-  }): Promise<HarvestAnalytics> {
-    return this.repository.getAnalytics(filters);
+  async getAnalytics(
+    companyId: string,
+    filters: {
+      farmId?: string;
+      fieldId?: string;
+      campaignId?: string;
+      startDate?: string;
+      endDate?: string;
+    },
+  ): Promise<HarvestAnalytics> {
+    return this.repository.getAnalytics(companyId, filters);
   }
 
   private async validateReferences(
-    companyId?: string,
+    companyId: string,
     farmId?: string,
     fieldId?: string,
     campaignId?: string,
     varietyId?: string,
   ): Promise<void> {
-    if (companyId) {
-      const company = await this.prisma.company.findFirst({
-        where: { id: companyId, deletedAt: null },
-      });
-      if (!company)
-        throw new NotFoundException(
-          `Empresa con ID "${companyId}" no encontrada`,
-        );
-    }
     if (farmId) {
       const farm = await this.prisma.farm.findFirst({
-        where: { id: farmId, deletedAt: null },
+        where: { id: farmId, companyId, deletedAt: null },
       });
       if (!farm)
         throw new NotFoundException(
@@ -92,7 +102,7 @@ export class HarvestsService {
     }
     if (fieldId) {
       const field = await this.prisma.field.findFirst({
-        where: { id: fieldId, deletedAt: null },
+        where: { id: fieldId, farm: { companyId }, deletedAt: null },
       });
       if (!field)
         throw new NotFoundException(`Campo con ID "${fieldId}" no encontrado`);

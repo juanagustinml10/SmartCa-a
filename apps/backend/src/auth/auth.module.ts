@@ -5,12 +5,13 @@ import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 import { JwtStrategy } from './strategies/jwt.strategy.js';
 import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy.js';
+import { requireEnv } from '../common/config/required-env.js';
 
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
-      secret: process.env.JWT_SECRET ?? 'super-secret-change-me',
+      secret: requireEnv('JWT_SECRET'),
       signOptions: { expiresIn: '2h' },
     }),
   ],

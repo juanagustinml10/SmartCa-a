@@ -1,3 +1,10 @@
+export interface FieldHarvest {
+  id: string;
+  campaignName: string;
+  tons: number;
+  startDate: string;
+}
+
 export interface FieldData {
   id: string;
   name: string;
@@ -20,6 +27,10 @@ export interface FieldData {
   costs: FieldCost[];
   activities: FieldActivity[];
   alerts: FieldAlert[];
+  harvests?: FieldHarvest[];
+  shiScore?: number | null;
+  shiLevel?: string | null;
+  shiCalculatedAt?: string | null;
 }
 
 export type FieldStatus = "active" | "inactive" | "harvesting" | "resting";

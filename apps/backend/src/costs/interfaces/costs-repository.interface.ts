@@ -54,17 +54,26 @@ export interface CostAnalytics {
 }
 
 export interface ICostsRepository {
-  findAll(query: QueryCostDto): Promise<PaginatedResult<Cost>>;
-  findById(id: string): Promise<CostWithRelations | null>;
-  create(dto: CreateCostDto): Promise<Cost>;
-  update(id: string, dto: UpdateCostDto): Promise<Cost>;
-  softDelete(id: string): Promise<Cost>;
-  getAnalytics(filters: {
-    companyId?: string;
-    farmId?: string;
-    fieldId?: string;
-    campaignId?: string;
-    startDate?: string;
-    endDate?: string;
-  }): Promise<CostAnalytics>;
+  findAll(
+    companyId: string,
+    query: QueryCostDto,
+  ): Promise<PaginatedResult<Cost>>;
+  findById(companyId: string, id: string): Promise<CostWithRelations | null>;
+  create(companyId: string, dto: CreateCostDto): Promise<Cost>;
+  update(
+    companyId: string,
+    id: string,
+    dto: UpdateCostDto,
+  ): Promise<Cost>;
+  softDelete(companyId: string, id: string): Promise<Cost>;
+  getAnalytics(
+    companyId: string,
+    filters: {
+      farmId?: string;
+      fieldId?: string;
+      campaignId?: string;
+      startDate?: string;
+      endDate?: string;
+    },
+  ): Promise<CostAnalytics>;
 }

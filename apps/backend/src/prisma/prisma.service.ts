@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '../generated/prisma/client.js';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { requireEnv } from '../common/config/required-env.js';
 
 @Injectable()
 export class PrismaService
@@ -9,7 +10,7 @@ export class PrismaService
 {
   constructor() {
     const adapter = new PrismaPg({
-      connectionString: process.env.DATABASE_URL!,
+      connectionString: requireEnv('DATABASE_URL'),
     });
     super({ adapter });
   }

@@ -79,9 +79,16 @@ export class ShiService {
     };
   }
 
-  async calculateForField(fieldId: string): Promise<ShiResult> {
+  async calculateForField(
+    companyId: string,
+    fieldId: string,
+  ): Promise<ShiResult> {
     const field = await this.prisma.field.findFirst({
-      where: { id: fieldId, deletedAt: null },
+      where: {
+        id: fieldId,
+        deletedAt: null,
+        farm: { companyId, deletedAt: null },
+      },
       include: {
         fieldStatus: true,
         alerts: { where: { priority: { in: ['high', 'critical'] } } },

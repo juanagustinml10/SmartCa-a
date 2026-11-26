@@ -9,9 +9,18 @@ export interface IUsersRepository {
     companyId: string,
     query: QueryUserDto,
   ): Promise<PaginatedResult<User>>;
-  findById(id: string): Promise<User | null>;
+  findById(companyId: string, id: string): Promise<User | null>;
   findByEmail(email: string): Promise<User | null>;
-  create(dto: CreateUserDto, passwordHash: string): Promise<User>;
-  update(id: string, dto: UpdateUserDto, passwordHash?: string): Promise<User>;
-  softDelete(id: string): Promise<User>;
+  create(
+    companyId: string,
+    dto: CreateUserDto,
+    passwordHash: string,
+  ): Promise<User>;
+  update(
+    companyId: string,
+    id: string,
+    dto: UpdateUserDto,
+    passwordHash?: string,
+  ): Promise<User>;
+  softDelete(companyId: string, id: string): Promise<User>;
 }

@@ -1,7 +1,9 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { AuditService } from './audit.service.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
+import { Permissions } from '../common/decorators/permissions.decorator.js';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
+import { QueryAuditDto } from './dto/query-audit.dto.js';
 import type { JwtPayload } from '@smartcana/types';
 
 @Controller('audit')
@@ -9,27 +11,18 @@ export class AuditController {
   constructor(private readonly service: AuditService) {}
 
   @Get()
-  @Roles('admin', 'ingeniero')
-  async findAll(
-    @Query('search') search?: string,
-    @Query('companyId') companyId?: string,
-    @Query('action') action?: string,
-    @Query('entity') entity?: string,
-    @Query('dateFrom') dateFrom?: string,
-    @Query('dateTo') dateTo?: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-    @CurrentUser() user?: JwtPayload,
-  ) {
+  @Roles('admin')
+  @Permissions('audit.view')
+  async findAll(@Query() query: QueryAuditDto, @CurrentUser() user: JwtPayload) {
     const filters = {
-      companyId: companyId ?? user?.companyId,
-      action,
-      entity,
-      dateFrom: dateFrom ? new Date(dateFrom) : undefined,
-      dateTo: dateTo ? new Date(dateTo) : undefined,
-      search,
-      page: page ? parseInt(page, 10) : 1,
-      limit: limit ? parseInt(limit, 10) : 20,
+      companyId: user.companyId,
+      action: query.action,
+      entity: query.entity,
+      dateFrom: query.dateFrom ? new Date(query.dateFrom) : undefined,
+      dateTo: query.dateTo ? new Date(query.dateTo) : undefined,
+      search: query.search,
+      page: query.page ?? 1,
+      limit: query.limit ?? 20,
     };
 
     if (filters.search) {

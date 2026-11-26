@@ -22,7 +22,7 @@ export function LoginForm() {
     if (!email.trim()) errs.email = 'El email es requerido';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = 'Email inválido';
     if (!password) errs.password = 'La contraseña es requerida';
-    else if (password.length < 4) errs.password = 'Mínimo 4 caracteres';
+    else if (password.length < 6) errs.password = 'Mínimo 6 caracteres';
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -162,9 +162,6 @@ export function LoginForm() {
               </span>
             </button>
 
-            <p className="text-center text-xs text-text-tertiary">
-              Demo: <span className="font-mono text-text-secondary">demo@smartcana.com</span> / <span className="font-mono text-text-secondary">demo1234</span>
-            </p>
           </motion.form>
         )}
       </AnimatePresence>

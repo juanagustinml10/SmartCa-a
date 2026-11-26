@@ -16,9 +16,16 @@ export interface PaginatedResult<T> {
 }
 
 export interface ISuppliersRepository {
-  findAll(query: QuerySupplierDto): Promise<PaginatedResult<Supplier>>;
-  findById(id: string): Promise<Supplier | null>;
-  create(dto: CreateSupplierDto): Promise<Supplier>;
-  update(id: string, dto: UpdateSupplierDto): Promise<Supplier>;
-  softDelete(id: string): Promise<Supplier>;
+  findAll(
+    companyId: string,
+    query: QuerySupplierDto,
+  ): Promise<PaginatedResult<Supplier>>;
+  findById(companyId: string, id: string): Promise<Supplier | null>;
+  create(companyId: string, dto: CreateSupplierDto): Promise<Supplier>;
+  update(
+    companyId: string,
+    id: string,
+    dto: UpdateSupplierDto,
+  ): Promise<Supplier>;
+  softDelete(companyId: string, id: string): Promise<Supplier>;
 }

@@ -3,7 +3,14 @@ export interface User {
   email: string;
   name: string;
   avatar?: string;
-  role: 'owner' | 'admin' | 'manager' | 'operator';
+  role:
+    | 'super_admin'
+    | 'admin'
+    | 'gerente'
+    | 'supervisor'
+    | 'ingeniero'
+    | 'operador'
+    | 'invitado';
   companyId: string;
   companyName: string;
   position?: string;

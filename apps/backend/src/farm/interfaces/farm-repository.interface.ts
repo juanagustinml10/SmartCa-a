@@ -4,8 +4,12 @@ import type { UpdateFarmDto } from '../dto/update-farm.dto.js';
 
 export interface IFarmRepository {
   findAll(companyId: string): Promise<Farm[]>;
-  findById(id: string): Promise<Farm | null>;
+  findById(companyId: string, id: string): Promise<Farm | null>;
   create(companyId: string, dto: CreateFarmDto): Promise<Farm>;
-  update(id: string, dto: UpdateFarmDto): Promise<Farm>;
-  softDelete(id: string): Promise<Farm>;
+  update(
+    companyId: string,
+    id: string,
+    dto: UpdateFarmDto,
+  ): Promise<Farm>;
+  softDelete(companyId: string, id: string): Promise<Farm>;
 }
