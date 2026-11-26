@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build
+.next/
+dist/
+build/
+out/
+
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Testing
+coverage/
+
+# Docker
+docker/data/
+
+# Prisma
+apps/backend/prisma/migrations/
+
+# Misc
+*.tsbuildinfo
+next-env.d.ts
+
+# Local tooling / artifacts
+.agents/
+.claude/
+.windsurf/
+skills-lock.json
+nul

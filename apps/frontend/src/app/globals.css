@@ -1,0 +1,297 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-geist-mono), "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  --color-bg-canvas: var(--bg-canvas);
+  --color-bg-surface: var(--bg-surface);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-subtle: var(--bg-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-inverse: var(--text-inverse);
+
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-300: var(--brand-300);
+  --color-brand-400: var(--brand-400);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
+  --color-brand-800: var(--brand-800);
+  --color-brand-900: var(--brand-900);
+
+  --color-accent-50: var(--accent-50);
+  --color-accent-100: var(--accent-100);
+  --color-accent-200: var(--accent-200);
+  --color-accent-300: var(--accent-300);
+  --color-accent-400: var(--accent-400);
+  --color-accent-500: var(--accent-500);
+  --color-accent-600: var(--accent-600);
+  --color-accent-700: var(--accent-700);
+  --color-accent-800: var(--accent-800);
+  --color-accent-900: var(--accent-900);
+
+  --color-ai-50: var(--ai-50);
+  --color-ai-100: var(--ai-100);
+  --color-ai-200: var(--ai-200);
+  --color-ai-500: var(--ai-500);
+  --color-ai-600: var(--ai-600);
+  --color-ai-700: var(--ai-700);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-7: var(--chart-7);
+  --color-chart-8: var(--chart-8);
+
+  --color-success-50: var(--success-50);
+  --color-success-500: var(--success-500);
+  --color-success-600: var(--success-600);
+  --color-warning-50: var(--warning-50);
+  --color-warning-500: var(--warning-500);
+  --color-warning-600: var(--warning-600);
+  --color-error-50: var(--error-50);
+  --color-error-500: var(--error-500);
+  --color-error-600: var(--error-600);
+  --color-info-50: var(--info-50);
+  --color-info-500: var(--info-500);
+  --color-info-600: var(--info-600);
+
+  --color-background: var(--bg-canvas);
+  --color-foreground: var(--text-primary);
+  --color-card: var(--bg-surface);
+  --color-card-foreground: var(--text-primary);
+  --color-popover: var(--bg-elevated);
+  --color-popover-foreground: var(--text-primary);
+  --color-primary: var(--brand-500);
+  --color-primary-foreground: #FFFFFF;
+  --color-secondary: var(--bg-subtle);
+  --color-secondary-foreground: var(--text-primary);
+  --color-muted: var(--bg-subtle);
+  --color-muted-foreground: var(--text-secondary);
+  --color-accent: var(--accent-500);
+  --color-accent-foreground: #FFFFFF;
+  --color-destructive: var(--error-500);
+  --color-destructive-foreground: #FFFFFF;
+  --color-border: var(--border-default);
+  --color-input: var(--border-default);
+  --color-ring: var(--brand-500);
+  --radius: 0.5rem;
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+
+  --color-sidebar: var(--bg-surface);
+  --color-sidebar-foreground: var(--text-primary);
+  --color-sidebar-primary: var(--brand-500);
+  --color-sidebar-primary-foreground: #FFFFFF;
+  --color-sidebar-accent: var(--bg-subtle);
+  --color-sidebar-accent-foreground: var(--text-primary);
+  --color-sidebar-border: var(--border-default);
+  --color-sidebar-ring: var(--brand-500);
+}
+
+:root {
+  --bg-canvas: #F7F7F5;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #FFFFFF;
+  --bg-subtle: #F0EFED;
+  --border-default: #E4E4E2;
+  --border-strong: #C2C1BF;
+  --text-primary: #1A1A1C;
+  --text-secondary: #7A7A7E;
+  --text-tertiary: #B5B5B8;
+  --text-inverse: #FFFFFF;
+
+  --brand-50: #ECFDF3;
+  --brand-100: #D1FADF;
+  --brand-200: #A6F4C5;
+  --brand-300: #6CE9A6;
+  --brand-400: #36D67E;
+  --brand-500: #1DB85E;
+  --brand-600: #169C4E;
+  --brand-700: #10803F;
+  --brand-800: #0B6632;
+  --brand-900: #064D25;
+
+  --accent-50: #FFF7EB;
+  --accent-100: #FFEBC4;
+  --accent-200: #FFD789;
+  --accent-300: #FFC04D;
+  --accent-400: #FFAB26;
+  --accent-500: #F59A00;
+  --accent-600: #D68200;
+  --accent-700: #B56B00;
+  --accent-800: #945500;
+  --accent-900: #734000;
+
+  --ai-50: #F5F0FF;
+  --ai-100: #EDE4FF;
+  --ai-200: #D9C9FF;
+  --ai-500: #8B5CF6;
+  --ai-600: #7C3AED;
+  --ai-700: #6D28D9;
+
+  --chart-1: #1DB85E;
+  --chart-2: #3B82F6;
+  --chart-3: #F59A00;
+  --chart-4: #8B5CF6;
+  --chart-5: #EF4444;
+  --chart-6: #06B6D4;
+  --chart-7: #EC4899;
+  --chart-8: #84CC16;
+
+  --success-50: #ECFDF5;
+  --success-500: #10B981;
+  --success-600: #059669;
+  --warning-50: #FFF7ED;
+  --warning-500: #F97316;
+  --warning-600: #EA580C;
+  --error-50: #FEF2F2;
+  --error-500: #EF4444;
+  --error-600: #DC2626;
+  --info-50: #EFF6FF;
+  --info-500: #3B82F6;
+  --info-600: #2563EB;
+}
+
+.dark {
+  --bg-canvas: #0B0B0D;
+  --bg-surface: #151518;
+  --bg-elevated: #1C1C21;
+  --bg-subtle: #222227;
+  --border-default: #2C2C32;
+  --border-strong: #3A3A42;
+  --text-primary: #F2F2F4;
+  --text-secondary: #929298;
+  --text-tertiary: #5A5A60;
+  --text-inverse: #1A1A1C;
+
+  --brand-50: #0A2E1A;
+  --brand-100: #104A2B;
+  --brand-200: #1A6F3F;
+  --brand-300: #279152;
+  --brand-400: #35B062;
+  --brand-500: #3DD87A;
+  --brand-600: #4DE88A;
+  --brand-700: #5EF59A;
+  --brand-800: #7FFFB4;
+  --brand-900: #A8FFCC;
+
+  --accent-50: #2E1F0A;
+  --accent-100: #4A3310;
+  --accent-200: #6F4F1A;
+  --accent-300: #916B27;
+  --accent-400: #B08535;
+  --accent-500: #D4A040;
+  --accent-600: #E8B550;
+  --accent-700: #F5C860;
+  --accent-800: #FFDB80;
+  --accent-900: #FFE9B3;
+
+  --ai-50: #1A0F2E;
+  --ai-100: #2E1A4A;
+  --ai-200: #4A2E6F;
+  --ai-500: #A78BFA;
+  --ai-600: #C4B5FD;
+  --ai-700: #DDD6FE;
+
+  --success-50: #0A2E1E;
+  --success-500: #34D399;
+  --success-600: #6EE7B7;
+  --warning-50: #2E1F0A;
+  --warning-500: #FB923C;
+  --warning-600: #FDBA74;
+  --error-50: #2E0A0A;
+  --error-500: #F87171;
+  --error-600: #FCA5A5;
+  --info-50: #0A1E2E;
+  --info-500: #60A5FA;
+  --info-600: #93C5FD;
+}
+
+@layer base {
+  * {
+    @apply border-border-default outline-ring/50;
+  }
+
+  html {
+    @apply font-sans antialiased;
+  }
+
+  body {
+    @apply bg-bg-canvas text-text-primary min-h-full;
+  }
+}
+
+@keyframes ambient-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(2%, 3%) scale(1.05); }
+  50% { transform: translate(-1%, 1%) scale(0.98); }
+  75% { transform: translate(3%, -2%) scale(1.02); }
+}
+
+@keyframes particle-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-15px); }
+}
+
+@keyframes gis-ping {
+  0% { transform: scale(0.6); opacity: 0.45; }
+  70%, 100% { transform: scale(2.2); opacity: 0; }
+}
+
+.leaflet-container {
+  font-family: var(--font-sans);
+  background: var(--bg-canvas);
+}
+
+.map-tooltip {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+.map-tooltip::before {
+  display: none;
+}
+
+.leaflet-popup-content-wrapper {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+.leaflet-popup-content {
+  margin: 12px 14px;
+}
+
+.leaflet-popup-tip {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+}
+
+.leaflet-popup-close-button {
+  color: var(--text-tertiary) !important;
+}
