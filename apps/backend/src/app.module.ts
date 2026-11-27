@@ -19,6 +19,7 @@ import { HarvestsModule } from './harvests/harvests.module.js';
 import { PermissionsModule } from './permissions/permissions.module.js';
 import { RolesModule } from './roles/roles.module.js';
 import { SessionsModule } from './sessions/sessions.module.js';
+import { DashboardModule } from './dashboard/dashboard.module.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
 import { RolesGuard } from './common/guards/roles.guard.js';
 import { PermissionsGuard } from './common/guards/permissions.guard.js';
@@ -50,6 +51,7 @@ import { ThrottlerGuard } from '@nestjs/throttler';
     PermissionsModule,
     RolesModule,
     SessionsModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [

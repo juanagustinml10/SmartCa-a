@@ -2,8 +2,17 @@
 
 import { motion } from "framer-motion";
 import { Map, Layers, ZoomIn, ZoomOut } from "lucide-react";
+import type { DashboardField, DashboardFieldStatus } from "@/types/dashboard";
 
-export function MapPlaceholder() {
+interface MapPlaceholderProps {
+  fields: DashboardField[];
+  areaHectares: number;
+  fieldStatus: DashboardFieldStatus[];
+}
+
+export function MapPlaceholder({ fields, areaHectares, fieldStatus }: MapPlaceholderProps) {
+  const activeStatuses = fieldStatus.filter((status) => status.count > 0);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -30,7 +39,7 @@ export function MapPlaceholder() {
       </div>
 
       <div className="relative flex h-[320px] items-center justify-center bg-gradient-to-br from-brand-950/5 to-brand-900/10">
-        <div className="absolute inset-0 opacity-[0.03" style={{
+        <div className="absolute inset-0 opacity-[0.03]" style={{
           backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M20 0v40M0 20h40' stroke='%231DB85E' stroke-width='0.5' fill='none'/%3E%3C/svg%3E")`,
         }} />
 
@@ -42,28 +51,38 @@ export function MapPlaceholder() {
               <Map className="h-7 w-7 text-brand-500" />
             </div>
             <p className="text-sm font-medium text-text-secondary">Mapa Interactivo</p>
-            <p className="text-xs text-text-tertiary">12 parcelas cargadas · 185.2 ha</p>
+            <p className="text-xs text-text-tertiary">
+              {fields.length} campo{fields.length !== 1 ? "s" : ""} ·{" "}
+              {areaHectares.toLocaleString("es-AR", {
+                minimumFractionDigits: 1,
+                maximumFractionDigits: 1,
+              })} ha
+            </p>
 
-            <div className="mt-2 flex gap-2">
-              {["Rendimiento", "Variedad", "NDVI"].map((layer) => (
-                <span
-                  key={layer}
-                  className="rounded-full border border-border-default bg-bg-surface px-3 py-1 text-[10px] font-medium text-text-tertiary"
-                >
-                  {layer}
-                </span>
-              ))}
-            </div>
+            {fields.length > 0 ? (
+              <div className="mt-2 flex max-w-sm flex-wrap justify-center gap-2">
+                {activeStatuses.map((status) => (
+                  <span
+                    key={status.code}
+                    className="rounded-full border border-border-default bg-bg-surface px-3 py-1 text-[10px] font-medium text-text-tertiary"
+                  >
+                    {status.name}: {status.count}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-text-tertiary">No hay campos registrados</p>
+            )}
           </div>
         </div>
 
         <div className="absolute bottom-4 left-4 rounded-lg border border-border-default bg-bg-surface/90 px-3 py-2 backdrop-blur-sm">
           <div className="flex items-center gap-3 text-xs text-text-secondary">
             <span className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-sm bg-brand-500/40" /> Parcelas
+              <span className="h-2.5 w-2.5 rounded-sm bg-brand-500/40" /> Campos
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-sm bg-accent-500/40" /> Zona riesgo
+              <span className="h-2.5 w-2.5 rounded-sm bg-accent-500/40" /> {activeStatuses.length} estados
             </span>
           </div>
         </div>

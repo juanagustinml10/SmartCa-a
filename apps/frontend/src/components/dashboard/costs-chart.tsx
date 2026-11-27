@@ -15,26 +15,16 @@ import {
   YAxis,
   CartesianGrid,
 } from "recharts";
-import { computeAnalytics } from "@/lib/mock-costs";
-import { MOCK_COSTS } from "@/lib/mock-costs";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import type { DashboardCostCategory, DashboardCostPoint } from "@/types/dashboard";
 
-const analytics = computeAnalytics(MOCK_COSTS);
-
-const topCategories = analytics.totalByCategory.slice(0, 5).map((c) => ({
-  name: c.categoryName,
-  value: c.total,
-  color: "#10B981",
-}));
-
-const monthlyTotal = analytics.totalByMonth.length > 0
-  ? analytics.totalByMonth[analytics.totalByMonth.length - 1].total
-  : 0;
-const prevMonthly = analytics.totalByMonth.length > 1
-  ? analytics.totalByMonth[analytics.totalByMonth.length - 2].total
-  : 0;
-const monthlyChange = prevMonthly > 0 ? ((monthlyTotal - prevMonthly) / prevMonthly) * 100 : 0;
+interface CostsChartProps {
+  total: number;
+  costPerHectare: number | null;
+  byCategory: DashboardCostCategory[];
+  byMonth: DashboardCostPoint[];
+}
 
 interface CustomTooltipProps {
   active?: boolean;
@@ -54,9 +44,18 @@ function CustomTooltipCost({ active, payload }: CustomTooltipProps) {
   );
 }
 
-export function CostsChart() {
+export function CostsChart({ total, costPerHectare, byCategory, byMonth }: CostsChartProps) {
   const [showBar, setShowBar] = useState(false);
-  const total = analytics.totalAmount;
+  const topCategories = byCategory.slice(0, 5).map((category) => ({
+    name: category.name,
+    value: category.total,
+    color: category.color,
+  }));
+  const monthlyTotal = byMonth.length > 0 ? byMonth[byMonth.length - 1].total : 0;
+  const previousMonthly = byMonth.length > 1 ? byMonth[byMonth.length - 2].total : 0;
+  const monthlyChange = previousMonthly > 0
+    ? ((monthlyTotal - previousMonthly) / previousMonthly) * 100
+    : 0;
 
   return (
     <motion.div
@@ -75,64 +74,78 @@ export function CostsChart() {
             Ver más <ArrowRight className="size-3" />
           </Link>
         </div>
-        <div className="flex items-center gap-4 mt-2">
-          <div className="text-xs text-text-secondary">
-            <span className="text-text-primary font-semibold">${monthlyTotal.toLocaleString()}</span> este mes
-            <span className={`ml-1 ${monthlyChange >= 0 ? 'text-error-500' : 'text-success-500'}`}>
-              {monthlyChange >= 0 ? '+' : ''}{monthlyChange.toFixed(1)}%
-            </span>
+        {total > 0 && (
+          <div className="flex flex-wrap items-center gap-4 mt-2">
+            <div className="text-xs text-text-secondary">
+              <span className="text-text-primary font-semibold">${monthlyTotal.toLocaleString("es-AR")}</span> en el último mes registrado
+              {previousMonthly > 0 && (
+                <span className={`ml-1 ${monthlyChange >= 0 ? "text-error-500" : "text-success-500"}`}>
+                  {monthlyChange >= 0 ? "+" : ""}{monthlyChange.toFixed(1)}%
+                </span>
+              )}
+            </div>
+            {costPerHectare !== null && (
+              <div className="text-xs text-text-secondary">
+                <span className="text-text-primary font-semibold">${costPerHectare.toLocaleString("es-AR")}</span> /ha
+              </div>
+            )}
           </div>
-          <div className="text-xs text-text-secondary">
-            <span className="text-text-primary font-semibold">${analytics.costPerHectare.toLocaleString()}</span> /ha
-          </div>
-        </div>
-      </div>
-
-      <div className="h-[280px]">
-        {showBar ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={analytics.totalByMonth.map((m) => ({ name: m.month.substring(0, 3), total: m.total }))} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-default)" vertical={false} />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} axisLine={false} tickLine={false} />
-              <Tooltip content={<CustomTooltipCost />} />
-              <Bar dataKey="total" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={30} />
-            </BarChart>
-          </ResponsiveContainer>
-        ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={topCategories}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={90}
-                paddingAngle={3}
-                dataKey="value"
-                stroke="none"
-              >
-                {topCategories.map((entry, index) => (
-                  <Cell key={index} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip content={<CustomTooltipCost />} />
-              <Legend
-                wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
-                iconType="circle"
-                iconSize={8}
-              />
-            </PieChart>
-          </ResponsiveContainer>
         )}
       </div>
 
-      <button
-        onClick={() => setShowBar(!showBar)}
-        className="mt-2 text-[10px] text-text-tertiary hover:text-text-secondary transition-colors"
-      >
-        {showBar ? 'Ver distribución' : 'Ver evolución mensual'}
-      </button>
+      {topCategories.length === 0 && byMonth.length === 0 ? (
+        <div className="flex h-[280px] items-center justify-center">
+          <p className="text-sm text-text-tertiary">No hay costos registrados para el período</p>
+        </div>
+      ) : (
+        <>
+          <div className="h-[280px]">
+            {showBar ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={byMonth.map((m) => ({ name: m.month, total: m.total }))} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-default)" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--text-tertiary)" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "var(--text-tertiary)" }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<CustomTooltipCost />} />
+                  <Bar dataKey="total" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={30} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={topCategories}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={3}
+                    dataKey="value"
+                    stroke="none"
+                  >
+                    {topCategories.map((entry, index) => (
+                      <Cell key={index} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomTooltipCost />} />
+                  <Legend
+                    wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
+                    iconType="circle"
+                    iconSize={8}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          <button
+            onClick={() => setShowBar(!showBar)}
+            className="mt-2 text-[10px] text-text-tertiary hover:text-text-secondary transition-colors"
+          >
+            {showBar ? "Ver distribución" : "Ver evolución mensual"}
+          </button>
+        </>
+      )}
     </motion.div>
   );
 }

@@ -4,17 +4,27 @@ import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Gauge, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
-import { MOCK_FIELD_SHI } from '@/lib/mock-harvests';
-export function ShiWidget() {
-  const fields = useMemo(() => {
-    return [...MOCK_FIELD_SHI.entries()].map(([fid, shi]) => ({
-      fieldId: fid,
-      fieldName: fid.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-      shi,
-    })).sort((a, b) => b.shi.score - a.shi.score);
-  }, []);
+import type { DashboardField } from '@/types/dashboard';
 
-  const averageScore = Math.round(fields.reduce((s, f) => s + f.shi.score, 0) / fields.length);
+export function ShiWidget({ fields }: { fields: DashboardField[] }) {
+  const scoredFields = useMemo(
+    () =>
+      fields
+        .filter((field) => field.shiScore !== null)
+        .map((field) => ({
+          id: field.id,
+          name: field.name,
+          score: field.shiScore as number,
+          level: field.shiLevel ?? 'sin clasificar',
+        }))
+        .sort((a, b) => b.score - a.score),
+    [fields],
+  );
+
+  const averageScore = scoredFields.length
+    ? Math.round(scoredFields.reduce((sum, field) => sum + field.score, 0) / scoredFields.length)
+    : 0;
+  const excellent = scoredFields.filter((field) => field.level.toLowerCase() === 'excelente').length;
 
   return (
     <motion.div
@@ -33,34 +43,48 @@ export function ShiWidget() {
             Ver más <ArrowRight className="size-3" />
           </Link>
         </div>
-        <p className="text-xs text-text-tertiary mt-1">Promedio: {averageScore}/100 · {fields.filter(f => f.shi.level === 'excelente').length} campos excelentes</p>
+        <p className="text-xs text-text-tertiary mt-1">
+          {scoredFields.length > 0
+            ? `Promedio: ${averageScore}/100 · ${excellent} campos excelentes`
+            : 'Sin índices calculados'}
+        </p>
       </div>
-      <div className="space-y-2">
-        {fields.slice(0, 5).map((f) => (
-          <div key={f.fieldId} className="flex items-center gap-3">
-            <div className="relative size-8 shrink-0">
-              <svg viewBox="0 0 36 36" className="size-8">
-                <circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--border-default)" strokeWidth="3" />
-                <circle
-                  cx="18" cy="18" r="15.5" fill="none"
-                  stroke={f.shi.score >= 80 ? '#10B981' : f.shi.score >= 60 ? '#3B82F6' : f.shi.score >= 40 ? '#F59E0B' : '#EF4444'}
-                  strokeWidth="3"
-                  strokeDasharray={`${(f.shi.score / 100) * 97.4} 97.4`}
-                  strokeLinecap="round"
-                  transform="rotate(-90 18 18)"
-                />
-                <text x="18" y="18" textAnchor="middle" dominantBaseline="central" fontSize="8" fill="var(--text-primary)" fontWeight="bold">
-                  {f.shi.score}
-                </text>
-              </svg>
+
+      {scoredFields.length === 0 ? (
+        <div className="flex h-[160px] items-center justify-center">
+          <p className="text-sm text-text-tertiary">No hay índices SHI registrados</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {scoredFields.slice(0, 5).map((field) => (
+            <div key={field.id} className="flex items-center gap-3">
+              <div className="relative size-8 shrink-0">
+                <svg viewBox="0 0 36 36" className="size-8">
+                  <circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--border-default)" strokeWidth="3" />
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="15.5"
+                    fill="none"
+                    stroke={field.score >= 80 ? '#10B981' : field.score >= 60 ? '#3B82F6' : field.score >= 40 ? '#F59E0B' : '#EF4444'}
+                    strokeWidth="3"
+                    strokeDasharray={`${(field.score / 100) * 97.4} 97.4`}
+                    strokeLinecap="round"
+                    transform="rotate(-90 18 18)"
+                  />
+                  <text x="18" y="18" textAnchor="middle" dominantBaseline="central" fontSize="8" fill="var(--text-primary)" fontWeight="bold">
+                    {field.score}
+                  </text>
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-text-primary truncate">{field.name}</p>
+                <p className="text-[10px] text-text-tertiary capitalize">{field.level}</p>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-text-primary truncate">{f.fieldName}</p>
-              <p className="text-[10px] text-text-tertiary capitalize">{f.shi.level}</p>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </motion.div>
   );
 }

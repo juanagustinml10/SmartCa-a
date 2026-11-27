@@ -1,3 +1,5 @@
+// El seed, las pruebas y el arranque dev deben leer el mismo .env local.
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
 import { AppModule } from './app.module.js';

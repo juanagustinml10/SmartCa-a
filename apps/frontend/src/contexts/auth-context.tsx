@@ -206,13 +206,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const logout = useCallback(() => {
-    if (getAccessToken()) {
-      // Se envía la revocación antes de borrar el token local.
-      void authApi.logout().catch(() => undefined);
+  const logout = useCallback(async () => {
+    const token = getAccessToken();
+    try {
+      if (token) {
+        // La revocación se envía antes de descartar el token local. Si falla
+        // (por ejemplo, sin conexión), igual se cierra la sesión local.
+        await authApi.logout();
+      }
+    } catch {
+      // No se muestra el error del servidor: el cierre local debe completarse.
+    } finally {
+      clearStoredAuth();
+      setState({ ...UNAUTHENTICATED });
     }
-    clearStoredAuth();
-    setState({ ...UNAUTHENTICATED });
   }, []);
 
   const updateUser = useCallback((data: Partial<User>) => {

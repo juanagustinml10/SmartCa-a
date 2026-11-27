@@ -36,10 +36,19 @@ export class UsersService {
     return user;
   }
 
-  /** Impide que un actor asigne un rol de nivel superior al suyo. */
-  private async assertRoleAssignable(roleId: string, actorRole: string) {
-    const role = await this.prisma.role.findUnique({ where: { id: roleId } });
-    if (!role || role.deletedAt)
+  /**
+   * Impide que un actor asigne un rol superior al suyo o perteneciente a otra
+   * empresa. La empresa siempre es la del contexto autenticado.
+   */
+  private async assertRoleAssignable(
+    roleId: string,
+    actorRole: string,
+    companyId: string,
+  ) {
+    const role = await this.prisma.role.findFirst({
+      where: { id: roleId, companyId, deletedAt: null },
+    });
+    if (!role)
       throw new BadRequestException(`Rol con ID "${roleId}" no encontrado`);
     if (!canAssignRole(actorRole, role.code)) {
       throw new ForbiddenException('No podés asignar un rol superior al tuyo');
@@ -55,7 +64,7 @@ export class UsersService {
     if (existing)
       throw new ConflictException(`El email "${dto.email}" ya está registrado`);
 
-    await this.assertRoleAssignable(dto.roleId, actorRole);
+    await this.assertRoleAssignable(dto.roleId, actorRole, companyId);
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
     return this.repository.create(companyId, dto, passwordHash);
@@ -69,7 +78,8 @@ export class UsersService {
   ): Promise<User> {
     await this.findById(companyId, id);
 
-    if (dto.roleId) await this.assertRoleAssignable(dto.roleId, actorRole);
+    if (dto.roleId)
+      await this.assertRoleAssignable(dto.roleId, actorRole, companyId);
 
     if (dto.email) {
       const existing = await this.repository.findByEmail(dto.email);

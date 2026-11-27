@@ -44,7 +44,11 @@ function AnimatedCounter({ value, decimals = 1 }: { value: number; decimals?: nu
   const hasAnimated = useRef(false);
 
   useEffect(() => {
-    if (hasAnimated.current) return;
+    // Al cambiar de campaña el valor se actualiza sin reiniciar la animación.
+    if (hasAnimated.current) {
+      setCount(value);
+      return;
+    }
     hasAnimated.current = true;
 
     const duration = 1200;

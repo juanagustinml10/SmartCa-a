@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { createHash } from 'node:crypto';
 import { jest } from '@jest/globals';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
@@ -17,6 +18,8 @@ import { CompanyController } from '../company/company.controller.js';
 import { CompanyService } from '../company/company.service.js';
 import { canAssignRole, isRoleAtLeast } from '../common/constants/roles.js';
 import { requireEnv } from '../common/config/required-env.js';
+import { DashboardController } from '../dashboard/dashboard.controller.js';
+import { DashboardService } from '../dashboard/dashboard.service.js';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { PermissionsGuard } from '../common/guards/permissions.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
@@ -24,6 +27,8 @@ import { FieldsController } from '../fields/fields.controller.js';
 import { FieldsRepository } from '../fields/fields.repository.js';
 import { FieldsService } from '../fields/fields.service.js';
 import { LoggerService } from '../logger/logger.service.js';
+import { PermissionsController } from '../permissions/permissions.controller.js';
+import { PermissionsService } from '../permissions/permissions.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { UsersController } from '../users/users.controller.js';
 import { UsersService } from '../users/users.service.js';
@@ -35,6 +40,14 @@ const PASSWORD = 'Clave123!';
 const FIELD_ID = '11111111-1111-4111-8111-111111111111';
 const FARM_ID = '22222222-2222-4222-8222-222222222222';
 const STATUS_ID = '33333333-3333-4333-8333-333333333333';
+
+interface TestSession {
+  id: string;
+  userId: string;
+  tokenHash: string;
+  expiredAt: Date | null;
+  isActive: boolean;
+}
 
 interface TestUser {
   id: string;
@@ -62,13 +75,19 @@ describe('Seguridad, autenticación y aislamiento multi-tenant', () => {
   let app: INestApplication;
   let jwtService: JwtService;
   let usersById: Map<string, TestUser>;
+  let activeSessions: Map<string, TestSession>;
 
   const prismaMock = {
     user: {
       findUnique: jest.fn<(...args: any[]) => any>(),
       update: jest.fn<(...args: any[]) => any>(),
     },
-    session: { create: jest.fn<(...args: any[]) => any>() },
+    session: {
+      create: jest.fn<(...args: any[]) => any>(),
+      findFirst: jest.fn<(...args: any[]) => any>(),
+      update: jest.fn<(...args: any[]) => any>(),
+      updateMany: jest.fn<(...args: any[]) => any>(),
+    },
     auditLog: { create: jest.fn<(...args: any[]) => any>() },
     field: { findFirst: jest.fn<(...args: any[]) => any>() },
   };
@@ -94,6 +113,14 @@ describe('Seguridad, autenticación y aislamiento multi-tenant', () => {
     update: jest.fn<(...args: any[]) => any>(),
     remove: jest.fn<(...args: any[]) => any>(),
   };
+  const permissionsServiceMock = {
+    findAll: jest.fn<(...args: any[]) => any>(),
+    findByModule: jest.fn<(...args: any[]) => any>(),
+    findById: jest.fn<(...args: any[]) => any>(),
+  };
+  const dashboardServiceMock = {
+    getOverview: jest.fn<(...args: any[]) => any>(),
+  };
 
   const meta = {
     total: 0,
@@ -111,16 +138,27 @@ describe('Seguridad, autenticación y aislamiento multi-tenant', () => {
   ): string {
     const user = usersById.get(userId);
     if (!user) throw new Error(`Usuario de prueba no encontrado: ${userId}`);
-    return jwtService.sign(
+    const sessionId = overrides.sessionId ?? `${userId}-session`;
+    const token = jwtService.sign(
       {
         sub: user.id,
         email: user.email,
         role: user.role.code,
         companyId: user.companyId,
+        sessionId,
         ...overrides,
       },
       { expiresIn: signing.expiresIn ?? '2h' },
     );
+    const digest = createHash('sha256').update(token).digest('hex');
+    activeSessions.set(sessionId, {
+      id: sessionId,
+      userId: user.id,
+      tokenHash: bcrypt.hashSync(digest, 10),
+      expiredAt: null,
+      isActive: true,
+    });
+    return token;
   }
 
   beforeAll(async () => {
@@ -191,7 +229,11 @@ describe('Seguridad, autenticación y aislamiento multi-tenant', () => {
             id: 'role-super',
             code: 'super_admin',
             name: 'Super administrador',
-            rolePermissions: permissions(['users.view', 'companies.manage']),
+            rolePermissions: permissions([
+              'users.view',
+              'companies.manage',
+              'permissions.manage',
+            ]),
           },
           company: { id: 'company-a', name: 'Empresa A' },
         },
@@ -212,6 +254,26 @@ describe('Seguridad, autenticación y aislamiento multi-tenant', () => {
             code: 'admin',
             name: 'Administrador',
             rolePermissions: permissions(['fields.view']),
+          },
+          company: { id: 'company-a', name: 'Empresa A' },
+        },
+      ],
+      [
+        'user-dashboard',
+        {
+          id: 'user-dashboard',
+          email: 'ingeniero@company-a.test',
+          firstName: 'Ines',
+          lastName: 'Ingeniera',
+          passwordHash: hash,
+          status: 'active',
+          deletedAt: null,
+          companyId: 'company-a',
+          role: {
+            id: 'role-ingeniero',
+            code: 'ingeniero',
+            name: 'Ingeniera',
+            rolePermissions: permissions(['dashboard.view']),
           },
           company: { id: 'company-a', name: 'Empresa A' },
         },
@@ -238,11 +300,19 @@ describe('Seguridad, autenticación y aislamiento multi-tenant', () => {
       ],
     ]);
 
+    activeSessions = new Map<string, TestSession>();
     jwtService = new JwtService({ secret: JWT_SECRET });
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [PassportModule.register({ defaultStrategy: 'jwt' })],
-      controllers: [AuthController, FieldsController, UsersController, CompanyController],
+      controllers: [
+        AuthController,
+        DashboardController,
+        FieldsController,
+        UsersController,
+        CompanyController,
+        PermissionsController,
+      ],
       providers: [
         AuthService,
         JwtStrategy,
@@ -258,9 +328,11 @@ describe('Seguridad, autenticación y aislamiento multi-tenant', () => {
             debug: jest.fn<(...args: any[]) => any>(),
           },
         },
+        { provide: DashboardService, useValue: dashboardServiceMock },
         { provide: FieldsService, useValue: fieldsServiceMock },
         { provide: UsersService, useValue: usersServiceMock },
         { provide: CompanyService, useValue: companyServiceMock },
+        { provide: PermissionsService, useValue: permissionsServiceMock },
         { provide: APP_GUARD, useClass: JwtAuthGuard },
         { provide: APP_GUARD, useClass: RolesGuard },
         { provide: APP_GUARD, useClass: PermissionsGuard },
@@ -289,10 +361,45 @@ describe('Seguridad, autenticación y aislamiento multi-tenant', () => {
         return usersById.get(where.id ?? '') ?? null;
       },
     );
+    activeSessions.clear();
     prismaMock.user.update.mockResolvedValue({});
-    prismaMock.session.create.mockResolvedValue({});
+    prismaMock.session.create.mockImplementation(
+      async (data: { id: string; userId: string; tokenHash: string }) => {
+        activeSessions.set(data.id, {
+          id: data.id,
+          userId: data.userId,
+          tokenHash: data.tokenHash,
+          expiredAt: null,
+          isActive: true,
+        });
+        return {};
+      },
+    );
+    prismaMock.session.findFirst.mockImplementation(
+      async ({ where }: { where: { id: string; userId: string } }) => {
+        const session = activeSessions.get(where.id);
+        if (!session || session.userId !== where.userId || !session.isActive)
+          return null;
+        return session;
+      },
+    );
+    prismaMock.session.update.mockResolvedValue({});
+    prismaMock.session.updateMany.mockImplementation(
+      async ({ where }: { where: { userId: string } }) => {
+        let count = 0;
+        for (const session of activeSessions.values()) {
+          if (session.userId === where.userId && session.isActive) {
+            session.isActive = false;
+            session.expiredAt = new Date();
+            count += 1;
+          }
+        }
+        return { count };
+      },
+    );
     prismaMock.field.findFirst.mockResolvedValue(null);
 
+    dashboardServiceMock.getOverview.mockResolvedValue({ metrics: {} });
     fieldsServiceMock.findAll.mockResolvedValue({ data: [], meta });
     fieldsServiceMock.findById.mockResolvedValue({ id: FIELD_ID, name: 'Campo A' });
     fieldsServiceMock.create.mockImplementation(
@@ -307,6 +414,9 @@ describe('Seguridad, autenticación y aislamiento multi-tenant', () => {
       id: FIELD_ID,
       ...dto,
     }));
+    permissionsServiceMock.findAll.mockResolvedValue({ data: [], meta });
+    permissionsServiceMock.findByModule.mockResolvedValue([]);
+    permissionsServiceMock.findById.mockResolvedValue({ id: FIELD_ID });
   });
 
   describe('POST /auth/login', () => {
@@ -353,6 +463,43 @@ describe('Seguridad, autenticación y aislamiento multi-tenant', () => {
         .expect(401);
     });
 
+    it('devuelve 401 si la sesión fue revocada', async () => {
+      const token = tokenFor('user-admin');
+      const sessionId = `${'user-admin'}-session`;
+      const session = activeSessions.get(sessionId);
+      if (!session) throw new Error('Sesión de prueba no encontrada');
+      session.isActive = false;
+      session.expiredAt = new Date();
+
+      await request(app.getHttpServer())
+        .get('/fields')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(401);
+    });
+
+    it('devuelve 401 si la sesión del token no existe', async () => {
+      const token = tokenFor('user-admin', { sessionId: 'sesion-inexistente' });
+      activeSessions.delete('sesion-inexistente');
+
+      await request(app.getHttpServer())
+        .get('/fields')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(401);
+    });
+
+    it('devuelve 401 si el token no coincide con el hash de la sesión', async () => {
+      const token = tokenFor('user-admin');
+      // Se emite otro token para la misma sesión: el primero deja de coincidir.
+      // Se cambia un claim no usado por la validación para garantizar que el
+      // JWT resultante sea distinto aunque se firme en el mismo segundo.
+      tokenFor('user-admin', { email: 'otro@company-a.test' });
+
+      await request(app.getHttpServer())
+        .get('/fields')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(401);
+    });
+
     it('devuelve 401 si el usuario fue desactivado después de emitir el token', async () => {
       const token = tokenFor('user-inactive');
       await request(app.getHttpServer())
@@ -374,6 +521,20 @@ describe('Seguridad, autenticación y aislamiento multi-tenant', () => {
         expect.any(Object),
       );
     });
+
+    it('el logout revoca el access token emitido', async () => {
+      const token = tokenFor('user-admin');
+
+      await request(app.getHttpServer())
+        .post('/auth/logout')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .get('/fields')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(401);
+    });
   });
 
   describe('roles y permisos', () => {
@@ -391,6 +552,27 @@ describe('Seguridad, autenticación y aislamiento multi-tenant', () => {
         .get('/users')
         .set('Authorization', `Bearer ${token}`)
         .expect(403);
+    });
+
+    it('GET /dashboard exige dashboard.view aunque el rol sea admin', async () => {
+      const token = tokenFor('user-no-perm');
+      await request(app.getHttpServer())
+        .get('/dashboard')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(403);
+      expect(dashboardServiceMock.getOverview).not.toHaveBeenCalled();
+    });
+
+    it('GET /dashboard permite a un usuario con dashboard.view y usa su empresa', async () => {
+      const token = tokenFor('user-dashboard', { companyId: 'company-b' });
+      await request(app.getHttpServer())
+        .get('/dashboard')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(dashboardServiceMock.getOverview).toHaveBeenCalledWith(
+        'company-a',
+        expect.any(Object),
+      );
     });
 
     it('un super_admin satisface @Roles(admin) y ve usuarios', async () => {
@@ -419,6 +601,24 @@ describe('Seguridad, autenticación y aislamiento multi-tenant', () => {
         .send({ name: 'Empresa Nueva' })
         .expect(201);
       expect(companyServiceMock.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('GET /permissions exige permissions.manage aunque el rol sea admin', async () => {
+      const token = tokenFor('user-admin');
+      await request(app.getHttpServer())
+        .get('/permissions')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(403);
+      expect(permissionsServiceMock.findAll).not.toHaveBeenCalled();
+    });
+
+    it('GET /permissions permite a un rol con permissions.manage', async () => {
+      const token = tokenFor('user-super');
+      await request(app.getHttpServer())
+        .get('/permissions')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(permissionsServiceMock.findAll).toHaveBeenCalledTimes(1);
     });
 
     it('la jerarquía de roles impide asignar roles superiores', () => {

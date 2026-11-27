@@ -4,34 +4,43 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import {
-  Menu, Search, Bell, ChevronDown, Sun, CloudSun, User, LogOut, Settings as SettingsIcon,
+  Menu, Search, Bell, ChevronDown, CloudSun, User, LogOut, Settings as SettingsIcon,
 } from "lucide-react";
-import { MOCK_CAMPAIGNS, MOCK_WEATHER } from "@/lib/mock-data";
 import { useAuth } from "@/contexts/auth-context";
+import type { DashboardCampaign } from "@/types/dashboard";
 
 interface HeaderProps {
   onMenuClick: () => void;
+  // Estos props sólo se usan en el Dashboard; las demás páginas siguen
+  // renderizando el header sin selector de campaña.
+  campaigns?: DashboardCampaign[];
+  campaignId?: string | null;
+  onCampaignChange?: (campaignId: string | null) => void;
+  alertCount?: number;
+  loading?: boolean;
 }
 
-const weatherIconMap: Record<string, React.ElementType> = {
-  sunny: Sun, "partly-cloudy": CloudSun, cloudy: CloudSun, rainy: CloudSun, stormy: CloudSun,
-};
-
-export function Header({ onMenuClick }: HeaderProps) {
+export function Header({
+  onMenuClick,
+  campaigns = [],
+  campaignId = null,
+  onCampaignChange,
+  alertCount = 0,
+  loading = false,
+}: HeaderProps) {
   const { user, logout } = useAuth();
   const router = useRouter();
-  const [activeCampaign, setActiveCampaign] = useState(MOCK_CAMPAIGNS[0]);
   const [campaignOpen, setCampaignOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-  const WeatherIcon = weatherIconMap[MOCK_WEATHER.condition] || CloudSun;
-  const initials = user?.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() ?? '??';
+  const initials = user?.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase() ?? "??";
+  const activeLabel = campaigns.find((item) => item.id === campaignId)?.code ?? "Todas las campañas";
 
-  function handleLogout() {
+  async function handleLogout() {
     setUserMenuOpen(false);
-    logout();
-    router.push('/login');
+    await logout();
+    router.push("/login");
   }
 
   return (
@@ -40,7 +49,7 @@ export function Header({ onMenuClick }: HeaderProps) {
         <div className="flex items-center gap-3">
           <button
             onClick={onMenuClick}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-bg-subtle hover:text-text-primary transition-colors md:hidden"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-bg-subtle transition-colors md:hidden"
           >
             <Menu className="h-5 w-5" />
           </button>
@@ -58,9 +67,10 @@ export function Header({ onMenuClick }: HeaderProps) {
           <div className="relative">
             <button
               onClick={() => setCampaignOpen(!campaignOpen)}
-              className="flex h-9 items-center gap-2 rounded-lg border border-border-default px-3 text-sm font-medium text-text-primary hover:bg-bg-subtle transition-colors"
+              disabled={loading}
+              className="flex h-9 items-center gap-2 rounded-lg border border-border-default px-3 text-sm font-medium text-text-primary hover:bg-bg-subtle transition-colors disabled:opacity-50"
             >
-              {activeCampaign.label}
+              {activeLabel}
               <ChevronDown className="h-3.5 w-3.5 text-text-tertiary" />
             </button>
             <AnimatePresence>
@@ -70,40 +80,54 @@ export function Header({ onMenuClick }: HeaderProps) {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -4, scale: 0.96 }}
                   transition={{ duration: 0.15 }}
-                  className="absolute right-0 top-full mt-1 w-40 rounded-lg border border-border-default bg-bg-elevated p-1 shadow-lg"
+                  className="absolute right-0 top-full mt-1 w-48 rounded-lg border border-border-default bg-bg-elevated p-1 shadow-lg"
                 >
-                  {MOCK_CAMPAIGNS.map((c) => (
+                  <button
+                    onClick={() => { onCampaignChange?.(null); setCampaignOpen(false); }}
+                    className={`flex w-full items-center rounded-md px-3 py-2 text-sm transition-colors ${
+                      campaignId === null
+                        ? "bg-brand-50 text-brand-600"
+                        : "text-text-secondary hover:bg-bg-subtle hover:text-text-primary"
+                    }`}
+                  >
+                    Todas las campañas
+                  </button>
+                  {campaigns.map((campaign) => (
                     <button
-                      key={c.id}
-                      onClick={() => { setActiveCampaign(c); setCampaignOpen(false); }}
+                      key={campaign.id}
+                      onClick={() => { onCampaignChange?.(campaign.id); setCampaignOpen(false); }}
                       className={`flex w-full items-center rounded-md px-3 py-2 text-sm transition-colors ${
-                        c.id === activeCampaign.id
+                        campaign.id === campaignId
                           ? "bg-brand-50 text-brand-600"
                           : "text-text-secondary hover:bg-bg-subtle hover:text-text-primary"
                       }`}
                     >
-                      {c.label}
-                      {c.isActive && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-brand-500" />}
+                      {campaign.code}
+                      {campaign.isActive && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-brand-500" />}
                     </button>
                   ))}
+                  {campaigns.length === 0 && (
+                    <p className="px-3 py-2 text-xs text-text-tertiary">Sin campañas registradas</p>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
 
-          <div className="hidden items-center gap-2 rounded-lg border border-border-default bg-bg-subtle px-3 py-1.5 sm:flex">
-            <WeatherIcon className="h-4 w-4 text-warning-500" />
-            <span className="font-mono text-sm font-medium text-text-primary">{MOCK_WEATHER.temperature}°</span>
-            <span className="text-xs text-text-tertiary">H:{MOCK_WEATHER.maxTemp}° L:{MOCK_WEATHER.minTemp}°</span>
+          <div className="hidden items-center gap-2 rounded-lg border border-border-default bg-bg-subtle px-3 py-1.5 text-xs text-text-tertiary sm:flex">
+            <CloudSun className="h-4 w-4" />
+            Clima no disponible
           </div>
 
           <div className="relative">
             <button
               onClick={() => setNotifOpen(!notifOpen)}
-              className="relative flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-bg-subtle hover:text-text-primary transition-colors"
+              className="relative flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-bg-subtle transition-colors"
             >
               <Bell className="h-5 w-5" />
-              <span className="absolute right-2 top-1.5 h-2 w-2 rounded-full bg-error-500 ring-2 ring-bg-surface" />
+              {alertCount > 0 && (
+                <span className="absolute right-2 top-1.5 h-2 w-2 rounded-full bg-error-500 ring-2 ring-bg-surface" />
+              )}
             </button>
             <AnimatePresence>
               {notifOpen && (
@@ -114,7 +138,11 @@ export function Header({ onMenuClick }: HeaderProps) {
                   transition={{ duration: 0.15 }}
                   className="absolute right-0 top-full mt-1 w-72 rounded-lg border border-border-default bg-bg-elevated p-2 shadow-lg"
                 >
-                  <div className="p-3 text-center text-sm text-text-tertiary">Sin notificaciones nuevas</div>
+                  <div className="p-3 text-center text-sm text-text-tertiary">
+                    {alertCount > 0
+                      ? `${alertCount} alerta${alertCount !== 1 ? "s" : ""} activa${alertCount !== 1 ? "s" : ""}`
+                      : "Sin alertas activas"}
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -143,10 +171,10 @@ export function Header({ onMenuClick }: HeaderProps) {
                     <p className="text-sm font-medium text-text-primary">{user?.name}</p>
                     <p className="text-xs text-text-tertiary">{user?.email}</p>
                   </div>
-                  <button onClick={() => { setUserMenuOpen(false); router.push('/profile'); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-text-secondary hover:bg-bg-subtle hover:text-text-primary transition-colors">
+                  <button onClick={() => { setUserMenuOpen(false); router.push("/profile"); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-text-secondary hover:bg-bg-subtle hover:text-text-primary transition-colors">
                     <User className="h-4 w-4" /> Perfil
                   </button>
-                  <button onClick={() => { setUserMenuOpen(false); router.push('/settings'); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-text-secondary hover:bg-bg-subtle hover:text-text-primary transition-colors">
+                  <button onClick={() => { setUserMenuOpen(false); router.push("/settings"); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-text-secondary hover:bg-bg-subtle hover:text-text-primary transition-colors">
                     <SettingsIcon className="h-4 w-4" /> Configuración
                   </button>
                   <button onClick={handleLogout} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-text-secondary hover:bg-bg-subtle hover:text-text-primary transition-colors">
